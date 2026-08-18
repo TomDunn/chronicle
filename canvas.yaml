@@ -1,0 +1,27 @@
+preset: package
+
+namespace: Chronicle\Process
+user-auth-model: Workbench\App\Models\User
+
+paths:
+  src: src
+  resource: resources
+
+factory:
+  path: database/factories
+
+migration:
+  path: database/migrations
+  prefix: ''
+
+console:
+  namespace: Chronicle\Process\Console\Commands
+
+model:
+  namespace: Chronicle\Process\Models
+
+provider:
+  namespace: Chronicle\Process
+
+testing:
+  namespace: Chronicle\Process\Tests
