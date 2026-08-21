@@ -32,7 +32,8 @@
     },
     "autoload": {
         "psr-4": {
-            "Chronicle\\Process\\": "src/"
+            "Chronicle\\Process\\": "src/",
+            "Chronicle\\Process\\Database\\Factories\\": "database/factories/"
         }
     },
     "autoload-dev": {
