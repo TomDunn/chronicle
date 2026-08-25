@@ -2,11 +2,18 @@
 
 declare(strict_types=1);
 
+use Carbon\Carbon;
+use Chronicle\Process\Hangup;
 use Chronicle\Process\Models\HistoryEntry;
 use Chronicle\Process\Models\ProcessInstance;
 use Chronicle\Process\ProcessManager;
 use Chronicle\Process\Tests\Fixtures\DummyProcess;
+use Chronicle\Process\Tests\Fixtures\ProcessWithTimer;
 use Illuminate\Support\Facades\DB;
+
+use function Pest\Laravel\freezeTime;
+use function Pest\Laravel\travel;
+use function Pest\Laravel\travelTo;
 
 function manager(): ProcessManager
 {
@@ -103,5 +110,28 @@ it('suspends rather than completing when a process awaits a signal', function ()
 })->todo();
 
 it('suspends rather than completing when a process awaits a timer', function (): void {
-    //
-})->todo();
+
+    $instant = Carbon::parse('2026-08-24T13:00:00');
+    travelTo($instant);
+
+    $instance = new ProcessWithTimer('user@example.com');
+    $hangup = manager()->run($instance);
+
+    expect($hangup)->toBeInstanceOf(Hangup::class);
+    /** @var Hangup $hangup */
+    expect($hangup->eligibleAt)->toEqual(Carbon::parse('2026-08-25T13:00:00'));
+
+    travel(1)->hours();
+
+    $hangup = manager()->run($instance);
+    expect($hangup)->toBeInstanceOf(Hangup::class);
+
+    travel(23)->hours();
+
+    $result = manager()->run($instance);
+    expect($result)->toBeArray()->toEqual(['email' => 'user@example.com']);
+
+    expect(HistoryEntry::query()->count())->toBe(1)
+        ->and(HistoryEntry::query()->orderBy('id')->pluck('label')->all())
+        ->toBe(['wait']);
+});

@@ -35,7 +35,7 @@ class ProcessInstance extends Model
     protected function casts(): array
     {
         return [
-            'eligible_at' => 'carbon',
+            'eligible_at' => 'datetime',
         ];
     }
 }

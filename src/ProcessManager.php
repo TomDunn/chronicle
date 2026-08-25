@@ -2,6 +2,7 @@
 
 namespace Chronicle\Process;
 
+use Chronicle\Process\Enums\InstanceStatus;
 use Chronicle\Process\Models\HistoryEntry;
 use Chronicle\Process\Models\ProcessInstance;
 use Chronicle\Process\Steps\SideEffectStep;
@@ -24,7 +25,7 @@ class ProcessManager
     /**
     * @template TResult
     * @param Process<TResult> $process
-    * @return TResult
+    * @return TResult|InstanceStatus
     */
     public function run(Process $process): mixed
     {
@@ -68,12 +69,15 @@ class ProcessManager
                     }
 
                     if ($step instanceof TimerStep) {
-                        HistoryEntry::query()->create([
+                        $timerEntry = HistoryEntry::query()->create([
                             'process_instance_id' => $instance->id,
                             'label' => $step->label,
                         ]);
 
-                        $instance->eligible_at = now()->add($step->interval);
+                        return new Hangup(
+                            $timerEntry->recorded_at->add($step->interval)->toImmutable(),
+                            InstanceStatus::AwaitingTimer
+                        );
                     }
 
                     if ($entry !== null && $entry->label !== $step->label) {
@@ -81,7 +85,16 @@ class ProcessManager
                     }
                 }
 
-                $generator->send($activityResult['value']);
+                if ($step instanceof TimerStep) {
+                    $eligibleAt = $entry->recorded_at->add($step->interval);
+                    if (now()->isBefore($eligibleAt)) {
+                        return new Hangup($eligibleAt->toImmutable(), InstanceStatus::AwaitingTimer);
+                    } else {
+                        $generator->next();
+                    }
+                } elseif ($step instanceof SideEffectStep) {
+                    $generator->send($activityResult['value']);
+                }
 
                 $i++;
             }
