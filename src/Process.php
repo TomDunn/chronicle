@@ -6,6 +6,7 @@ namespace Chronicle\Process;
 
 use Carbon\CarbonInterval;
 use Chronicle\Process\Enums\Consistency;
+use Chronicle\Process\Steps\AwaitSignalStep;
 use Chronicle\Process\Steps\SideEffectStep;
 use Chronicle\Process\Steps\Step;
 use Chronicle\Process\Steps\TimerStep;
@@ -51,11 +52,21 @@ abstract class Process
     }
 
     /**
-    *
+    * @template TSignalPayload
+    * @param AwaitSignalStep<TSignalPayload> $step
+    * @return Generator<int, Step, mixed, TSignalPayload>
     */
-    public function run()
+    protected function awaitSignal(AwaitSignalStep $step): Generator
     {
-        $generator = $this->handle();
-        $step = 0;
+        $payload = yield $step;
+        return $payload;
+    }
+
+    /**
+    * @return AwaitSignalStep<mixed>
+    */
+    protected function defineSignal(string $label, ?CarbonInterval $duration = null): AwaitSignalStep
+    {
+        return new AwaitSignalStep(label: $label, timeout: $duration);
     }
 }

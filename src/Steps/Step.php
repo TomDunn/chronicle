@@ -2,7 +2,7 @@
 
 namespace Chronicle\Process\Steps;
 
-abstract readonly class Step
+abstract class Step
 {
     public function __construct(public string $label) {}
 }

@@ -26,9 +26,13 @@ return new class extends Migration {
 
         Schema::create('process_instance_history_entry', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('process_instance_id')->nullable(false)->constrained('process_instance', 'id');
+            $table->foreignId('process_instance_id')
+                ->index(true)
+                ->nullable(false)
+                ->constrained('process_instance', 'id');
             $table->string('label');
             $table->jsonb('payload')->nullable(true);
+            $table->string('entry_type', 25)->nullable(false);
             $table->boolean('out_of_band')->default(false);
             $table->timestamp('recorded_at');
         });

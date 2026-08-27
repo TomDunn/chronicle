@@ -10,7 +10,7 @@ use Chronicle\Process\Enums\InstanceStatus;
 final class Hangup
 {
     public function __construct(
-        public CarbonImmutable $eligibleAt,
+        public CarbonImmutable $waitingUntil,
         public InstanceStatus $status,
     ) {}
 }

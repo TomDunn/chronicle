@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Chronicle\Process\Enums\EntryType;
 use Chronicle\Process\Models\HistoryEntry;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -62,6 +63,7 @@ it('persists a history entry through the model', function (): void {
         'process_instance_id' => $instanceId,
         'label' => 'reference',
         'payload' => ['value' => 'ref-1234'],
+        'entry_type' => EntryType::class,
     ]);
 
     expect($entry->exists)->toBeTrue()

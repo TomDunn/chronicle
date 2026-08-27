@@ -119,7 +119,7 @@ it('suspends rather than completing when a process awaits a timer', function ():
 
     expect($hangup)->toBeInstanceOf(Hangup::class);
     /** @var Hangup $hangup */
-    expect($hangup->eligibleAt)->toEqual(Carbon::parse('2026-08-25T13:00:00'));
+    expect($hangup->waitingUntil)->toEqual(Carbon::parse('2026-08-25T13:00:00'));
 
     travel(1)->hours();
 

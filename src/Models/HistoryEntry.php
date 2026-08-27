@@ -6,6 +6,7 @@ namespace Chronicle\Process\Models;
 
 use Carbon\Carbon;
 use Chronicle\Process\Database\Factories\HistoryEntryFactory;
+use Chronicle\Process\Enums\EntryType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -28,7 +29,7 @@ class HistoryEntry extends Model
 
     protected $guarded = [];
 
-    protected $fillable = ['process_instance_id', 'label', 'payload', 'out_of_band'];
+    protected $fillable = ['process_instance_id', 'label', 'payload', 'out_of_band', 'entry_type',];
 
     protected static function newFactory(): HistoryEntryFactory
     {
@@ -44,6 +45,7 @@ class HistoryEntry extends Model
             'payload' => 'array',
             'out_of_band' => 'boolean',
             'recorded_at' => 'datetime',
+            'entry_type' => EntryType::class,
         ];
     }
 

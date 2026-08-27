@@ -2,9 +2,11 @@
 
 namespace Chronicle\Process;
 
+use Chronicle\Process\Enums\EntryType;
 use Chronicle\Process\Enums\InstanceStatus;
 use Chronicle\Process\Models\HistoryEntry;
 use Chronicle\Process\Models\ProcessInstance;
+use Chronicle\Process\Steps\AwaitSignalStep;
 use Chronicle\Process\Steps\SideEffectStep;
 use Chronicle\Process\Steps\Step;
 use Chronicle\Process\Steps\TimerStep;
@@ -65,6 +67,7 @@ class ProcessManager
                             'process_instance_id' => $instance->id,
                             'label' => $step->label,
                             'payload' => $activityResult,
+                            'entry_type' => EntryType::Step,
                         ]);
                     }
 
@@ -72,11 +75,25 @@ class ProcessManager
                         $timerEntry = HistoryEntry::query()->create([
                             'process_instance_id' => $instance->id,
                             'label' => $step->label,
+                            'entry_type' => EntryType::Step,
                         ]);
 
                         return new Hangup(
                             $timerEntry->recorded_at->add($step->interval)->toImmutable(),
                             InstanceStatus::AwaitingTimer
+                        );
+                    }
+
+                    if ($step instanceof AwaitSignalStep) {
+                        $timerEntry = HistoryEntry::query()->create([
+                            'process_instance_id' => $instance->id,
+                            'label' => $step->label,
+                            'entry_type' => EntryType::Step,
+                        ]);
+
+                        return new Hangup(
+                            $timerEntry->recorded_at->add($step->timeout)->toImmutable(),
+                            InstanceStatus::AwaitingSignal,
                         );
                     }
 
