@@ -1,24 +1,34 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Chronicle\Process\Models;
 
 use Carbon\Carbon;
 use Database\Factories\ProcessInstanceFactory;
+use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * @property int $id
- * @property string $name
+ * @property string $id
+ * @property string $process_type
+ * @property ?string $process_version
  * @property string $key
- * @property ?Carbon $eligible_at
+ * @property bool $active
+ * @property string $status
+ * @property ?string $claim_token
+ * @property ?Carbon $claim_expires_at
+ * @property array<string, mixed> $document
  * @property Carbon $created_at
  * @property Carbon $updated_at
  */
 class ProcessInstance extends Model
 {
-    /** @use HasFactory<\Database\Factories\ProcessInstanceFactory> */
+    /** @use HasFactory<ProcessInstanceFactory> */
     use HasFactory;
+
+    use HasUlids;
 
     protected $table = 'process_instance';
 
@@ -35,7 +45,9 @@ class ProcessInstance extends Model
     protected function casts(): array
     {
         return [
-            'eligible_at' => 'datetime',
+            'active' => 'boolean',
+            'claim_expires_at' => 'datetime',
+            'document' => 'array',
         ];
     }
 }

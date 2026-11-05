@@ -6,7 +6,7 @@ namespace Chronicle\Process;
 
 use Chronicle\Process\Contracts\Payload;
 use Chronicle\Process\Contracts\Process;
-use ProcessHandle;
+use Chronicle\Process\Data\ProcessHandle;
 
 final class Chronicle
 {
@@ -24,7 +24,6 @@ final class Chronicle
     {
         return null;
     }
-
 
     // the ability to start a process
     //
@@ -53,21 +52,31 @@ final class Chronicle
     //
 
     /**
-    * Launch a new process and execute asynchronously.
-    * @param list<mixed> $params
-    */
+     * Launch a new process and execute asynchronously.
+     *
+     * @param  class-string<Process>  $process
+     * @param  list<mixed>  $params
+     */
     public function launch(
         string $process,
         array $params,
         ?string $key = null,
     ): ?ProcessHandle {
+        // assert the process is registered
+        //
+        // try to insert a process instance
+        //  with key, status = pending, etc....
+        //
+        //  if insert fails due to key constraint, return handle for existing process
+        //  otherwise return handle for new process
         return null;
     }
 
     /**
-    * Launch a new process and execute synchronously until blocked.
-    * @param list<mixed> $params
-    */
+     * Launch a new process and execute synchronously until blocked.
+     *
+     * @param  list<mixed>  $params
+     */
     public function launchAndProcess(
         string $process,
         array $params,
@@ -77,9 +86,10 @@ final class Chronicle
     }
 
     /**
-    * Alias for launchAndProcess
-    * @param list<mixed> $params
-    */
+     * Alias for launchAndProcess
+     *
+     * @param  list<mixed>  $params
+     */
     public function run(
         string $process,
         array $params,
@@ -88,6 +98,9 @@ final class Chronicle
         return null;
     }
 
+    /**
+     * Sends a named signal asynchronously to the process.
+     */
     public function signal(
         string $signalName,
         ?string $instanceId = null,
@@ -98,6 +111,9 @@ final class Chronicle
         return null;
     }
 
+    /**
+     * Sends a named signal and resumes processing synchronously until blocking occurs or the process completes.
+     */
     public function signalAndProcess(
         string $signalName,
         ?string $instanceId = null,
@@ -118,7 +134,4 @@ final class Chronicle
 
     // message (?string $processInstanceId = null, ?string $key = null, ?string $processType = null, MessagePayload $payload)
     // send a message to a process
-
-
-
 }
