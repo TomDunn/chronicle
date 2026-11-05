@@ -47,13 +47,21 @@ class ProcessManager
             /** @var Collection<int, HistoryEntry> $history */
             $history = HistoryEntry::query()->where('process_instance_id', $instance->id)->orderBy('id', 'asc')->get();
 
+            /** @var array<int, HistoryEntry> $signalInbox */
+            $signalInbox = history->filter(fn($historyEntry) => $historyEntry->entry_type === EntryType::SignalReceived));
+
             /** @var Generator<int, Step, mixed, scalar|array<mixed>|null> */
             $generator = $process->handle();
+
             $i = 0;
+
+            /** @var ?AwaitSignalStep $signalWaitStep */
+            $signalWaitStep = null;
 
             while ($generator->valid()) {
                 $step = $generator->current();
 
+                /** @var ?HistoryEntry $entry */
                 $entry = $history->get($i);
                 $activityResult = $entry?->payload;
 
@@ -85,14 +93,14 @@ class ProcessManager
                     }
 
                     if ($step instanceof AwaitSignalStep) {
-                        $timerEntry = HistoryEntry::query()->create([
+                        $signalEntry = HistoryEntry::query()->create([
                             'process_instance_id' => $instance->id,
                             'label' => $step->label,
                             'entry_type' => EntryType::Step,
                         ]);
 
                         return new Hangup(
-                            $timerEntry->recorded_at->add($step->timeout)->toImmutable(),
+                            $signalEntry->recorded_at->add($step->timeout)->toImmutable(),
                             InstanceStatus::AwaitingSignal,
                         );
                     }

@@ -14,7 +14,9 @@ use Illuminate\Database\Eloquent\Model;
  * @property int $id
  * @property int $process_instance_id
  * @property string $label
+ * @property EntryType $entry_type
  * @property array<string, mixed> $payload
+ * @property ?int $consumes_entry_id
  * @property bool $out_of_band
  * @property Carbon $recorded_at
  */

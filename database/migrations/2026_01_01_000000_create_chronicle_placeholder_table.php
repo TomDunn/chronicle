@@ -34,6 +34,10 @@ return new class extends Migration {
             $table->jsonb('payload')->nullable(true);
             $table->string('entry_type', 25)->nullable(false);
             $table->boolean('out_of_band')->default(false);
+            $table->foreignId('consumes_entry_id')
+                ->index(true)
+                ->nullable(true)
+                ->constrained('process_instance_history_entry', 'id');
             $table->timestamp('recorded_at');
         });
     }
