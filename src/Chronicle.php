@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Chronicle\Process;
 
+use Chronicle\Process\Contracts\Payload;
 use Chronicle\Process\Contracts\Process;
 use ProcessHandle;
 
@@ -14,7 +15,7 @@ final class Chronicle
         return $this;
     }
 
-    public function registerPayload(string $type, string $class): self
+    public function registerPayload(Payload $payload): self
     {
         return $this;
     }
@@ -51,8 +52,58 @@ final class Chronicle
     //   created_at, updated_at
     //
 
+    /**
+    * Launch a new process and execute asynchronously.
+    * @param list<mixed> $params
+    */
     public function launch(
+        string $process,
+        array $params,
+        ?string $key = null,
+    ): ?ProcessHandle {
+        return null;
+    }
 
+    /**
+    * Launch a new process and execute synchronously until blocked.
+    * @param list<mixed> $params
+    */
+    public function launchAndProcess(
+        string $process,
+        array $params,
+        ?string $key = null,
+    ): ?ProcessHandle {
+        return null;
+    }
+
+    /**
+    * Alias for launchAndProcess
+    * @param list<mixed> $params
+    */
+    public function run(
+        string $process,
+        array $params,
+        ?string $key = null,
+    ): ?ProcessHandle {
+        return null;
+    }
+
+    public function signal(
+        string $signalName,
+        ?string $instanceId = null,
+        ?string $process = null,
+        ?string $key = null,
+        ?Payload $payload = null,
+    ): ?ProcessHandle {
+        return null;
+    }
+
+    public function signalAndProcess(
+        string $signalName,
+        ?string $instanceId = null,
+        ?string $process = null,
+        ?string $key = null,
+        ?Payload $payload = null,
     ): ?ProcessHandle {
         return null;
     }
