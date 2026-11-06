@@ -9,16 +9,16 @@ use Chronicle\Process\Tests\Fixtures\LaunchableProcess;
 use Illuminate\Support\Str;
 
 it('rejects launching an unregistered process', function (): void {
-    $chronicle = new Chronicle;
+    $chronicle = new Chronicle();
 
-    expect(fn () => $chronicle->launch(LaunchableProcess::class, [], 'shared-key'))
+    expect(fn() => $chronicle->launch(LaunchableProcess::class, [], 'shared-key'))
         ->toThrow(InvalidArgumentException::class);
 
     expect(ProcessInstance::query()->count())->toBe(0);
 });
 
 it('launches a registered process as an active pending instance', function (): void {
-    $chronicle = (new Chronicle)->registerProcess(new LaunchableProcess);
+    $chronicle = (new Chronicle())->registerProcess(LaunchableProcess::class);
 
     $handle = $chronicle->launch(LaunchableProcess::class, [], 'shared-key');
 
@@ -40,7 +40,7 @@ it('launches a registered process as an active pending instance', function (): v
 });
 
 it('returns the existing active instance without resetting it', function (string $status): void {
-    $chronicle = (new Chronicle)->registerProcess(new LaunchableProcess);
+    $chronicle = (new Chronicle())->registerProcess(LaunchableProcess::class);
     $instance = ProcessInstance::query()->create([
         'process_type' => LaunchableProcess::getProcessType(),
         'key' => 'shared-key',
@@ -50,7 +50,7 @@ it('returns the existing active instance without resetting it', function (string
         'claim_expires_at' => now()->addMinute(),
         'document' => ['existing' => true],
     ]);
-    $original = $instance->getRawOriginal();
+    $original = $instance->refresh()->getRawOriginal();
 
     $handle = $chronicle->launch(LaunchableProcess::class, [], 'shared-key');
 
@@ -65,19 +65,20 @@ it('returns the existing active instance without resetting it', function (string
 })->with(['pending', 'running', 'suspended']);
 
 it('creates a new instance when the same key only has an inactive instance', function (string $status): void {
-    $chronicle = (new Chronicle)->registerProcess(new LaunchableProcess);
+    $chronicle = (new Chronicle())->registerProcess(LaunchableProcess::class);
     $previous = ProcessInstance::query()->create([
         'process_type' => LaunchableProcess::getProcessType(),
         'key' => 'shared-key',
         'active' => false,
         'status' => $status,
         'document' => ['previous' => true],
-    ]);
+    ])->refresh();
     $original = $previous->getRawOriginal();
 
     $handle = $chronicle->launch(LaunchableProcess::class, [], 'shared-key');
 
     expect($handle)->toBeInstanceOf(ProcessHandle::class);
+    expect($handle->id())->not()->toEqual($previous->id);
 
     $instance = ProcessInstance::query()->where('active', true)->sole();
 
@@ -90,7 +91,7 @@ it('creates a new instance when the same key only has an inactive instance', fun
 })->with(['completed', 'failed']);
 
 it('creates separate active instances for different keys', function (): void {
-    $chronicle = (new Chronicle)->registerProcess(new LaunchableProcess);
+    $chronicle = (new Chronicle())->registerProcess(LaunchableProcess::class);
 
     $first = $chronicle->launch(LaunchableProcess::class, [], 'first-key');
     $second = $chronicle->launch(LaunchableProcess::class, [], 'second-key');
@@ -105,7 +106,7 @@ it('creates separate active instances for different keys', function (): void {
 });
 
 it('creates a new instance for each launch without a key', function (): void {
-    $chronicle = (new Chronicle)->registerProcess(new LaunchableProcess);
+    $chronicle = (new Chronicle())->registerProcess(LaunchableProcess::class);
 
     $first = $chronicle->launch(LaunchableProcess::class, []);
     $second = $chronicle->launch(LaunchableProcess::class, []);

@@ -7,11 +7,25 @@ namespace Chronicle\Process;
 use Chronicle\Process\Contracts\Payload;
 use Chronicle\Process\Contracts\Process;
 use Chronicle\Process\Data\ProcessHandle;
+use Chronicle\Process\Models\ProcessInstance;
+use InvalidArgumentException;
 
 final class Chronicle
 {
-    public function registerProcess(Process $process): self
+    /** @var array<string, class-string<Process>> $processRegistry */
+    private $processRegistry = [];
+
+    /**
+     * @param class-string<Process> $process
+     */
+    public function registerProcess(string $process): self
     {
+        if (!is_a($process, Process::class, true)) {
+            throw new InvalidArgumentException("$process is not an implementation of Process interface");
+        }
+
+        $this->processRegistry[$process::getProcessType()] = $process;
+
         return $this;
     }
 
@@ -62,14 +76,38 @@ final class Chronicle
         array $params,
         ?string $key = null,
     ): ?ProcessHandle {
-        // assert the process is registered
-        //
+
+        if (! in_array($process, $this->processRegistry)) {
+            throw new InvalidArgumentException("$process is not registered");
+        }
+
+        $instance = null;
+
+        if (! $key) {
+            $instance = ProcessInstance::query()->create([
+                'process_type' => $process::getProcessType(),
+                'active' => true,
+                'key' => $key,
+                'status' => 'pending',
+                'document' => [],
+            ]);
+        } else {
+            $instance = ProcessInstance::query()->createOrFirst(
+                ['key' => $key, 'process_type' => $process::getProcessType(), 'active' => true],
+                [
+                    'status' => 'pending',
+                    'document' => [],
+                ]
+            );
+        }
+
+
         // try to insert a process instance
         //  with key, status = pending, etc....
         //
         //  if insert fails due to key constraint, return handle for existing process
         //  otherwise return handle for new process
-        return null;
+        return new ProcessHandle($instance->id, $instance->process_type, $instance->status, $instance->key, null);
     }
 
     /**

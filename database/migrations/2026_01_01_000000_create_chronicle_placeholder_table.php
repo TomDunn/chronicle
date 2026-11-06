@@ -6,36 +6,36 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
-return new class extends Migration
-{
+return new class extends Migration {
     public function up(): void
     {
         Schema::create('process_instance', function (Blueprint $table) {
             $table->ulid('id')->primary();
             $table->string('process_type');
             $table->string('process_version')->nullable(true);
-            $table->string('key');
+            $table->string('key')->nullable(true);
             $table->boolean('active')->index(true);
             $table->enum('status', ['pending', 'suspended', 'running', 'failed', 'completed']);
             $table->uuid('claim_token')->nullable(true);
             $table->timestamp('claim_expires_at')->nullable(true);
             $table->jsonb('document');
             $table->timestamps();
-            $table->unique(['name', 'key']);
         });
 
-        if (str_contains(strtolower(DB::connection()->getDriverName()), 'db2')) {
+        if (Str::contains(DB::connection()->getDriverName(), ['db2', 'sqlite'])) {
+            //DB::statement("CREATE UNIQUE INDEX process_instance_active_key_unique ON process_instance(key) WHERE active = 'true';");
             DB::statement('
-                CREATE UNIQUE INDEX jobs_active_key_unique
-                ON jobs ("key")
-                WHERE active = 1;
+                CREATE UNIQUE INDEX process_instance_active_key_unique
+                ON process_instance (process_type, key)
+                WHERE active = 1 AND key IS NOT NULL;
             ');
         } else {
             DB::statement('
-                CREATE UNIQUE INDEX process_active_key_unique
+                CREATE UNIQUE INDEX process_instance_active_key_unique
                 ON process_instance ("key")
-                WHERE active = true
+                WHERE active = true;
             ');
         }
 
