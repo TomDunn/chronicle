@@ -8,7 +8,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
-return new class extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
         Schema::create('process_instance', function (Blueprint $table) {
@@ -25,7 +26,7 @@ return new class extends Migration {
         });
 
         if (Str::contains(DB::connection()->getDriverName(), ['db2', 'sqlite'])) {
-            //DB::statement("CREATE UNIQUE INDEX process_instance_active_key_unique ON process_instance(key) WHERE active = 'true';");
+            // DB::statement("CREATE UNIQUE INDEX process_instance_active_key_unique ON process_instance(key) WHERE active = 'true';");
             DB::statement('
                 CREATE UNIQUE INDEX process_instance_active_key_unique
                 ON process_instance (process_type, key)
@@ -39,7 +40,7 @@ return new class extends Migration {
             ');
         }
 
-        Schema::create('process_instance_history_entry', function (Blueprint $table) {
+        Schema::create('process_journal_entry', function (Blueprint $table) {
             $table->ulid('id')->primary();
             $table->foreignUlid('process_instance_id')
                 ->index(true)
@@ -50,9 +51,13 @@ return new class extends Migration {
             // the payload
             $table->jsonb('payload')->nullable(true);
             // the payload type - used to help with deserialization
+            // these come from the payload, which may be from
+            // an internal, framework defined payload or a from
+            // the application using the framework
             $table->string('payload_type')->nullable(true);
             // what type of history entry is this?
-            // activity, wait, signal_wait, signal
+            // activity, wait, signal_wait, signal.
+            // entry types are strictly defined by the framework.
             $table->string('entry_type', 25)->nullable(false);
             // $table->foreignId('consumes_entry_id')
             //     ->index(true)
@@ -60,11 +65,18 @@ return new class extends Migration {
             //     ->constrained('process_instance_history_entry', 'id');
             $table->timestamp('recorded_at');
         });
+
+        DB::statement('
+            CREATE UNIQUE INDEX process_journal_entry_process_launch_unique
+            ON process_journal_entry (process_instance_id, entry_type)
+            WHERE entry_type = \'launch\';
+        ');
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('process_instance_history_entry');
+        DB::statement('DROP INDEX process_journal_entry_process_launch_unique');
+        Schema::dropIfExists('process_journal_entry');
         DB::statement('DROP INDEX process_instance_active_key_unique');
         Schema::dropIfExists('process_instance');
         Schema::dropIfExists('process_name_key');

@@ -6,21 +6,23 @@ namespace Chronicle\Process;
 
 use Chronicle\Process\Contracts\Payload;
 use Chronicle\Process\Contracts\Process;
+use Chronicle\Process\Data\ArrayPayload;
 use Chronicle\Process\Data\ProcessHandle;
+use Chronicle\Process\Models\JournalEntry;
 use Chronicle\Process\Models\ProcessInstance;
 use InvalidArgumentException;
 
 final class Chronicle
 {
-    /** @var array<string, class-string<Process>> $processRegistry */
+    /** @var array<string, class-string<Process>> */
     private $processRegistry = [];
 
     /**
-     * @param class-string<Process> $process
+     * @param  class-string<Process>  $process
      */
     public function registerProcess(string $process): self
     {
-        if (!is_a($process, Process::class, true)) {
+        if (! is_a($process, Process::class, true)) {
             throw new InvalidArgumentException("$process is not an implementation of Process interface");
         }
 
@@ -39,44 +41,17 @@ final class Chronicle
         return null;
     }
 
-    // the ability to start a process
-    //
-    // Accepts a registered process type string
-    // Accepts constructor params for the process
-    // Accepts optional "key" or "token" which is used
-    // by the Chronicle engine to ensure that there is at
-    // most one active process instance per key/token.
-    //
-    // Ability to specify the process should run async
-    // or start processing synchronously.
-    //
-    // if a key is provided we check if any process instance is active with that key, if so,
-    // return that process instance.
-    //
-    // if not, use a process_key table, perform an insert-or-ignore of the key, then acquire
-    // a write lock and attempt to create an active process instance for that key if not exists.
-    //
-    // a process instance consists of:
-    //   id - ULID most likely
-    //   type - a registered process type string
-    //   key - nullable string
-    //   active - true/false. false meaning the process instance can no longer run - it has completed or otherwise terminated. true simply means
-    //   the process has not terminated yet. true does not necessarily mean the process instance is actively executing.
-    //   created_at, updated_at
-    //
-
     /**
      * Launch a new process and execute asynchronously.
      *
      * @param  class-string<Process>  $process
-     * @param  list<mixed>  $params
+     * @param  array<string, mixed>|Payload  $payload
      */
     public function launch(
         string $process,
-        array $params,
+        Payload|array $payload,
         ?string $key = null,
     ): ?ProcessHandle {
-
         if (! in_array($process, $this->processRegistry)) {
             throw new InvalidArgumentException("$process is not registered");
         }
@@ -97,16 +72,25 @@ final class Chronicle
                 [
                     'status' => 'pending',
                     'document' => [],
-                ]
+                ],
             );
         }
 
+        if ($instance->wasRecentlyCreated) {
+            if (! $payload instanceof Payload) {
+                $payload = ArrayPayload::make($payload);
+            }
 
-        // try to insert a process instance
-        //  with key, status = pending, etc....
-        //
-        //  if insert fails due to key constraint, return handle for existing process
-        //  otherwise return handle for new process
+            JournalEntry::query()->createOrFirst([
+                'process_instance_id' => $instance->id,
+                'entry_type' => 'launch',
+            ], [
+                'label' => 'Process launched',
+                'payload_type' => $payload->type(),
+                'payload' => $payload->jsonSerialize(),
+            ]);
+        }
+
         return new ProcessHandle($instance->id, $instance->process_type, $instance->status, $instance->key, null);
     }
 
