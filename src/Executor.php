@@ -4,35 +4,69 @@ declare(strict_types=1);
 
 namespace Chronicle\Process;
 
+use Chronicle\Process\Data\ExecutionSummary;
 use Chronicle\Process\Data\ProcessHandle;
+use Chronicle\Process\Enums\EntryType;
+use Chronicle\Process\Enums\ExecutionOutcome;
+use Chronicle\Process\Models\JournalEntry;
+use Chronicle\Process\Models\ProcessInstance;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 final class Executor
 {
-    public function execute(ProcessHandle $handle): void
+    public function execute(ProcessHandle $handle): ExecutionSummary
     {
         // claim instance by generating a uuid
+        $claim = Str::uuid()->toString();
         // do a conditional update on process instance where claim token is missing, active is true and status pending
         // and process instance equals the one on the handle. Attempt to set the claim
         // token to the generated uuid, the status to running, and the claim expiry as
         // now() + some fixed amount such as 5 minutes for now the expiry will be configured more in the future.
-        // observe the updated record count, if its 1, we claimed the instance
-        // if its zero, someone else claimed the instance and we should not proceed
-        // we will declare a type like a "ExecutionSummary" which can describe
-        // the result of the execute call. One scenario to handle would be that
-        // this executor instance did nothing because another executor claimed the process.
-        //
-        // if we did claim then continue.
+        $claimed = ProcessInstance::query()
+            ->where('id', $handle->id)
+            ->whereNull('claim_token')
+            ->where('active', true)
+            ->where('status', 'pending')
+            ->update([
+                'claim_token' => $claim,
+                'claim_expires_at' => now()->addMinutes(5),
+                'status' => 'running',
+            ]);
+
+        if (! $claim) {
+            return new ExecutionSummary($handle->id, ExecutionOutcome::Skipped);
+        }
         //
         // now start a transaction, do a read on the process instance again only selecting
         // a row matching the instance and with our claim token, lock the row for update.
-        //
-        // observe the result count, if 0, someone else stole the claim, we should not proceed.
-        // use similar execution summary as above to indicate that we effectively did nothing.
-        //
-        // otherwise proceed - we now have the instance locked and is guaranteed to be ours.
-        //
-        // load the processes' non-signal, non activity_error, non process_error journal entries in ascending order by sequence.
-        // load the processes' signals in ascending order in a separate collection. this is our "inbox"
+        DB::connection()->transaction(function () use ($handle, $claim) {
+            $instance = ProcessInstance::query()
+                ->where('id', $handle->id)
+                ->where('claim_token', $claim)
+                ->lockForUpdate()
+                ->first();
+
+            // observe the result count, if 0, someone else stole the claim, we should not proceed.
+            // use similar execution summary as above to indicate that we effectively did nothing.
+            if (! $instance) {
+                return new ExecutionSummary($handle->id, ExecutionOutcome::Skipped);
+            }
+
+            // load the processes' non-signal, non activity_error, non process_error journal entries in ascending order by sequence.
+            $replayEntries = JournalEntry::query()
+                ->where('process_instance_id', $instance->id)
+                ->whereNotIn('entry_type', [EntryType::ActivityError, EntryType::ProcessError, EntryType::Signal])
+                ->orderBy('sequence', 'asc')
+                ->get();
+
+            // load the processes' signals in ascending order in a separate collection. this is our "inbox"
+            $signalInbox = JournalEntry::query()
+                ->where('process_instance_id', $instance->id)
+                ->where('entry_type', EntryType::Signal)
+                ->orderBy('id', 'asc')
+                ->get();
+        });
         //
         // for now, activity and process error entries are treated as informational logs.
         //

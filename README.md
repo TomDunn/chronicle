@@ -55,7 +55,18 @@ php artisan vendor:publish --tag="chronicle-assets"
 
 ## Usage
 
-<!-- Add a basic usage example here. -->
+Import the Chronicle facade to register and launch a process:
+
+```php
+use App\Processes\ApprovalProcess;
+use Chronicle\Process\Facades\Chronicle;
+
+Chronicle::registerProcess(ApprovalProcess::class);
+
+$handle = Chronicle::launch(ApprovalProcess::class, ['request_id' => 123], key: 'approval-123');
+```
+
+The facade and `app(\Chronicle\Process\Chronicle::class)` share the same singleton and process registry.
 
 ## Changelog
 

@@ -16,6 +16,7 @@ class ProcessServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/../config/chronicle.php', 'chronicle');
 
+        $this->app->singleton(Chronicle::class);
         $this->app->singleton(Process::class);
     }
 
