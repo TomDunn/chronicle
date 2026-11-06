@@ -2,13 +2,17 @@
 
 declare(strict_types=1);
 
+use Carbon\Carbon;
 use Chronicle\Process\Chronicle;
-use Chronicle\Process\Data\ArrayPayload;
+use Chronicle\Process\Contracts\Payload;
 use Chronicle\Process\Data\ProcessHandle;
 use Chronicle\Process\Models\JournalEntry;
 use Chronicle\Process\Models\ProcessInstance;
 use Chronicle\Process\Tests\Fixtures\LaunchableProcess;
+use Chronicle\Process\Tests\Fixtures\LaunchPayload;
 use Illuminate\Support\Str;
+
+use function Pest\Laravel\travelTo;
 
 it('rejects launching an unregistered process', function (): void {
     $chronicle = new Chronicle;
@@ -20,9 +24,10 @@ it('rejects launching an unregistered process', function (): void {
         ->and(JournalEntry::query()->count())->toBe(0);
 });
 
-it('launches a registered process as an active pending instance', function (): void {
+it('launches a registered process and records its launch input', function (Payload|array $payload, string $payloadType, array $expectedPayload): void {
     $chronicle = (new Chronicle)->registerProcess(LaunchableProcess::class);
-    $payload = ['user_id' => 42, 'options' => ['notify' => true]];
+    $recordedAt = Carbon::parse('2026-11-06 12:00:00');
+    travelTo($recordedAt);
 
     $handle = $chronicle->launch(LaunchableProcess::class, $payload, 'shared-key');
 
@@ -47,10 +52,24 @@ it('launches a registered process as an active pending instance', function (): v
     expect(Str::isUlid($entry->id))->toBeTrue()
         ->and($entry->process_instance_id)->toBe($instance->id)
         ->and($entry->entry_type)->toBe('launch')
-        ->and($entry->payload_type)->toBe(ArrayPayload::make($payload)->type())
-        ->and($entry->payload)->toBe($payload)
-        ->and($entry->recorded_at)->not->toBeNull();
-});
+        ->and($entry->step_key)->toBe('initial_launch')
+        ->and($entry->description)->toBe('Process launched')
+        ->and($entry->payload_type)->toBe($payloadType)
+        ->and($entry->payload)->toBe($expectedPayload)
+        ->and($entry->recorded_at)->toEqual($recordedAt);
+})->with([
+    'nested array' => [
+        ['user_id' => 42, 'options' => ['notify' => true], 'note' => null],
+        '__chronicle_array_payload',
+        ['user_id' => 42, 'options' => ['notify' => true], 'note' => null],
+    ],
+    'empty array' => [[], '__chronicle_array_payload', []],
+    'custom payload' => [
+        new LaunchPayload(['customer_id' => 'cus-123', 'amount' => 1299]),
+        'test-launch',
+        ['customer_id' => 'cus-123', 'amount' => 1299],
+    ],
+]);
 
 it('returns the existing active instance without resetting it', function (string $status): void {
     $chronicle = (new Chronicle)->registerProcess(LaunchableProcess::class);
@@ -80,16 +99,23 @@ it('returns the existing active instance without resetting it', function (string
 
 it('preserves the original launch entry when an instance is launched again', function (): void {
     $chronicle = (new Chronicle)->registerProcess(LaunchableProcess::class);
+    $recordedAt = Carbon::parse('2026-11-06 12:00:00');
+    travelTo($recordedAt);
+
     $first = $chronicle->launch(LaunchableProcess::class, ['message' => 'original'], 'shared-key');
     $entry = JournalEntry::query()->sole();
     $original = $entry->getRawOriginal();
 
+    travelTo($recordedAt->copy()->addHour());
     $second = $chronicle->launch(LaunchableProcess::class, ['message' => 'replacement'], 'shared-key');
+    $entry->refresh();
 
     expect($second->id())->toBe($first->id())
         ->and(ProcessInstance::query()->count())->toBe(1)
         ->and(JournalEntry::query()->count())->toBe(1)
-        ->and($entry->fresh()->getRawOriginal())->toBe($original);
+        ->and($entry->getRawOriginal())->toBe($original)
+        ->and($entry->payload)->toBe(['message' => 'original'])
+        ->and($entry->recorded_at)->toEqual($recordedAt);
 });
 
 it('creates a new instance when the same key only has an inactive instance', function (string $status): void {
@@ -127,8 +153,8 @@ it('creates a new instance when the same key only has an inactive instance', fun
 it('creates separate active instances for different keys', function (): void {
     $chronicle = (new Chronicle)->registerProcess(LaunchableProcess::class);
 
-    $first = $chronicle->launch(LaunchableProcess::class, [], 'first-key');
-    $second = $chronicle->launch(LaunchableProcess::class, [], 'second-key');
+    $first = $chronicle->launch(LaunchableProcess::class, ['message' => 'first'], 'first-key');
+    $second = $chronicle->launch(LaunchableProcess::class, ['message' => 'second'], 'second-key');
 
     expect($first)->toBeInstanceOf(ProcessHandle::class)
         ->and($second)->toBeInstanceOf(ProcessHandle::class);
@@ -140,13 +166,18 @@ it('creates separate active instances for different keys', function (): void {
 
     expect(JournalEntry::query()->where('entry_type', 'launch')->pluck('process_instance_id')->all())
         ->toEqualCanonicalizing([$first->id(), $second->id()]);
+
+    expect(JournalEntry::query()->where('process_instance_id', $first->id())->sole()->payload)
+        ->toBe(['message' => 'first'])
+        ->and(JournalEntry::query()->where('process_instance_id', $second->id())->sole()->payload)
+        ->toBe(['message' => 'second']);
 });
 
 it('creates a new instance for each launch without a key', function (): void {
     $chronicle = (new Chronicle)->registerProcess(LaunchableProcess::class);
 
-    $first = $chronicle->launch(LaunchableProcess::class, []);
-    $second = $chronicle->launch(LaunchableProcess::class, []);
+    $first = $chronicle->launch(LaunchableProcess::class, ['message' => 'first']);
+    $second = $chronicle->launch(LaunchableProcess::class, ['message' => 'second']);
 
     expect($first)->toBeInstanceOf(ProcessHandle::class)
         ->and($second)->toBeInstanceOf(ProcessHandle::class);
@@ -158,4 +189,9 @@ it('creates a new instance for each launch without a key', function (): void {
 
     expect(JournalEntry::query()->where('entry_type', 'launch')->pluck('process_instance_id')->all())
         ->toEqualCanonicalizing([$first->id(), $second->id()]);
+
+    expect(JournalEntry::query()->where('process_instance_id', $first->id())->sole()->payload)
+        ->toBe(['message' => 'first'])
+        ->and(JournalEntry::query()->where('process_instance_id', $second->id())->sole()->payload)
+        ->toBe(['message' => 'second']);
 });

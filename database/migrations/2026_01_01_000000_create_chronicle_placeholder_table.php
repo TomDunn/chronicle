@@ -22,6 +22,9 @@ return new class extends Migration
             $table->uuid('claim_token')->nullable(true);
             $table->timestamp('claim_expires_at')->nullable(true);
             $table->jsonb('document');
+            $table->jsonb('result')->nullable(true);
+            $table->timestamp('suspended_until')->nullable(true);
+            $table->json('suspended_for_signals')->nullable(true);
             $table->timestamps();
         });
 
@@ -46,8 +49,13 @@ return new class extends Migration
                 ->index(true)
                 ->nullable(false)
                 ->constrained('process_instance', 'id');
-            // operator friendly label for the entry
-            $table->string('label');
+            // executor managed journal entry sequence number.
+            // sequence is not present for signal entries.
+            $table->bigInteger('sequence')->nullable(true);
+            // operator friendly description for the entry
+            $table->string('description')->nullable(true);
+            // logical identifier of the step, assists with replay.
+            $table->string('step_key')->nullable(false);
             // the payload
             $table->jsonb('payload')->nullable(true);
             // the payload type - used to help with deserialization
@@ -56,13 +64,16 @@ return new class extends Migration
             // the application using the framework
             $table->string('payload_type')->nullable(true);
             // what type of history entry is this?
-            // activity, wait, signal_wait, signal.
+            // activity, wait, signal_wait, signal, launch, activity_error, process_error,
             // entry types are strictly defined by the framework.
             $table->string('entry_type', 25)->nullable(false);
-            // $table->foreignId('consumes_entry_id')
-            //     ->index(true)
-            //     ->nullable(true)
-            //     ->constrained('process_instance_history_entry', 'id');
+            // signals are consumed by signal wait acitvities
+            // helping us ensure each signal is consumed at most once
+            // as well as consistent consumption order during replay
+            $table->foreignUlid('consumed_by')
+                ->index(true)
+                ->nullable(true)
+                ->constrained('process_journal_entry', 'id');
             $table->timestamp('recorded_at');
         });
 

@@ -36,7 +36,7 @@ final class ProcessHandle
 
     public function hasCompleted(): bool
     {
-        return $this->status === 'complete';
+        return $this->status === 'completed';
     }
 
     public function isSuspended(): bool

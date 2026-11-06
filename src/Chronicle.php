@@ -10,6 +10,7 @@ use Chronicle\Process\Data\ArrayPayload;
 use Chronicle\Process\Data\ProcessHandle;
 use Chronicle\Process\Models\JournalEntry;
 use Chronicle\Process\Models\ProcessInstance;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 final class Chronicle
@@ -56,42 +57,46 @@ final class Chronicle
             throw new InvalidArgumentException("$process is not registered");
         }
 
-        $instance = null;
+        return DB::connection()->transaction(function () use ($key, $process, $payload) {
+            $instance = null;
 
-        if (! $key) {
-            $instance = ProcessInstance::query()->create([
-                'process_type' => $process::getProcessType(),
-                'active' => true,
-                'key' => $key,
-                'status' => 'pending',
-                'document' => [],
-            ]);
-        } else {
-            $instance = ProcessInstance::query()->createOrFirst(
-                ['key' => $key, 'process_type' => $process::getProcessType(), 'active' => true],
-                [
+            if (! $key) {
+                $instance = ProcessInstance::query()->create([
+                    'process_type' => $process::getProcessType(),
+                    'active' => true,
+                    'key' => $key,
                     'status' => 'pending',
                     'document' => [],
-                ],
-            );
-        }
-
-        if ($instance->wasRecentlyCreated) {
-            if (! $payload instanceof Payload) {
-                $payload = ArrayPayload::make($payload);
+                ]);
+            } else {
+                $instance = ProcessInstance::query()->createOrFirst(
+                    ['key' => $key, 'process_type' => $process::getProcessType(), 'active' => true],
+                    [
+                        'status' => 'pending',
+                        'document' => [],
+                    ],
+                );
             }
 
-            JournalEntry::query()->createOrFirst([
-                'process_instance_id' => $instance->id,
-                'entry_type' => 'launch',
-            ], [
-                'label' => 'Process launched',
-                'payload_type' => $payload->type(),
-                'payload' => $payload->jsonSerialize(),
-            ]);
-        }
+            if ($instance->wasRecentlyCreated) {
+                if (! $payload instanceof Payload) {
+                    $payload = ArrayPayload::make($payload);
+                }
 
-        return new ProcessHandle($instance->id, $instance->process_type, $instance->status, $instance->key, null);
+                JournalEntry::query()->createOrFirst([
+                    'process_instance_id' => $instance->id,
+                    'entry_type' => 'launch',
+                ], [
+                    'description' => 'Process launched',
+                    'payload_type' => $payload->type(),
+                    'payload' => $payload->jsonSerialize(),
+                    'step_key' => 'initial_launch',
+                    'sequence' => 0,
+                ]);
+            }
+
+            return new ProcessHandle($instance->id, $instance->process_type, $instance->status, $instance->key, null);
+        });
     }
 
     /**

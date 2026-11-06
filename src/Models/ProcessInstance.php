@@ -20,6 +20,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property ?string $claim_token
  * @property ?Carbon $claim_expires_at
  * @property array<string, mixed> $document
+ * @property ?array<string, mixed> $result
  * @property Carbon $created_at
  * @property Carbon $updated_at
  */
@@ -48,6 +49,7 @@ class ProcessInstance extends Model
             'active' => 'boolean',
             'claim_expires_at' => 'datetime',
             'document' => 'array',
+            'result' => 'array',
         ];
     }
 }

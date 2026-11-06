@@ -11,11 +11,12 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * @property string $id
  * @property string $process_instance_id
- * @property string $label
+ * @property string $description
  * @property ?array<string, mixed> $payload
  * @property ?string $payload_type
  * @property string $entry_type
  * @property Carbon $recorded_at
+ * @property string $step_key
  */
 class JournalEntry extends Model
 {
