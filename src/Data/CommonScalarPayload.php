@@ -7,9 +7,14 @@ namespace Chronicle\Process\Data;
 use Carbon\Carbon;
 use Chronicle\Process\Contracts\Payload;
 use Chronicle\Process\Exceptions\InvalidPayloadException;
+use DateTimeInterface;
+use Ramsey\Uuid\Uuid;
+use Ramsey\Uuid\UuidInterface;
 
 final class CommonScalarPayload implements Payload
 {
+    public const string DATETIME_FORMAT = 'Y-m-d\TH:i:s.uP';
+
     /**
      * @param  array<string, mixed>  $payload
      */
@@ -17,14 +22,14 @@ final class CommonScalarPayload implements Payload
         private array $payload,
     ) {}
 
-    public static function make(string|Carbon|int $value): static
+    public static function make(string|DateTimeInterface|int|float|bool|UuidInterface|null $value): static
     {
         $payload = null;
 
-        if ($value instanceof Carbon) {
+        if ($value instanceof DateTimeInterface) {
             $payload = [
-                'k' => 'carbon',
-                'v' => $value->serialize(),
+                'k' => 'datetime',
+                'v' => $value->format(self::DATETIME_FORMAT),
             ];
         } elseif (is_string($value)) {
             $payload = [
@@ -35,6 +40,26 @@ final class CommonScalarPayload implements Payload
             $payload = [
                 'k' => 'int',
                 'v' => $value,
+            ];
+        } elseif (is_float($value)) {
+            $payload = [
+                'k' => 'float',
+                'v' => $value,
+            ];
+        } elseif (is_bool($value)) {
+            $payload = [
+                'k' => 'bool',
+                'v' => $value,
+            ];
+        } elseif (is_null($value)) {
+            $payload = [
+                'k' => 'null',
+                'v' => $value,
+            ];
+        } elseif ($value instanceof UuidInterface) {
+            $payload = [
+                'k' => 'uuid',
+                'v' => $value->toString(),
             ];
         } else {
             throw InvalidPayloadException::unsupportedScalar($value);
@@ -56,10 +81,12 @@ final class CommonScalarPayload implements Payload
         return $this->payload;
     }
 
-    public function value(): Carbon|int|string
+    public function value(): DateTimeInterface|int|string|bool|float|UuidInterface|null
     {
-        if ($this->payload['k'] === 'carbon') {
-            return Carbon::fromSerialized($this->payload['v']);
+        if ($this->payload['k'] === 'datetime') {
+            return Carbon::createFromFormat(self::DATETIME_FORMAT, $this->payload['v']);
+        } elseif ($this->payload['k'] === 'uuid') {
+            return Uuid::fromString($this->payload['v']);
         }
 
         return $this->payload['v'];

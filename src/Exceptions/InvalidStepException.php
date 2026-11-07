@@ -12,4 +12,10 @@ final class InvalidStepException extends RuntimeException implements ChronicleEx
     {
         return new self("Process instance [{$instanceId}] yielded something other than a step!");
     }
+
+    public static function unknownStep(string|int $instanceId, mixed $step): self
+    {
+        $step = $step::class;
+        return new self("Process instance [{$instanceId}] yielded something other than a step! {$step}");
+    }
 }

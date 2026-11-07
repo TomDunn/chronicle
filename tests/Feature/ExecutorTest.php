@@ -6,6 +6,7 @@ use Carbon\Carbon;
 use Chronicle\Process\Chronicle;
 use Chronicle\Process\Contracts\Payload;
 use Chronicle\Process\Data\ArrayPayload;
+use Chronicle\Process\Data\CommonScalarPayload;
 use Chronicle\Process\Data\ProcessHandle;
 use Chronicle\Process\Enums\EntryType;
 use Chronicle\Process\Executor;
@@ -36,6 +37,7 @@ function launchExecutorProcess(Closure $handler, Payload|array $payload = []): P
     $chronicle = (new Chronicle())
         ->registerProcess(ExecutorProcess::class)
         ->registerPayload(LaunchPayload::class)
+        ->registerPayload(CommonScalarPayload::class)
         ->registerPayload(ArrayPayload::class);
 
     app()->instance(Chronicle::class, $chronicle);
@@ -236,12 +238,12 @@ it('reconstructs supported object activity results during replay', function (obj
     'Carbon' => [
         Carbon::parse('2026-11-06 12:00:00.123456', 'America/New_York'),
         Carbon::class,
-        fn(Carbon $value): string => $value->format('Y-m-d H:i:s.u e'),
+        fn(Carbon $value): string => $value->format('Y-m-d\TH:i:s.uP'),
     ],
     'immutable date' => [
         new DateTimeImmutable('2026-11-06T12:00:00.123456+00:00'),
         DateTimeImmutable::class,
-        fn(DateTimeImmutable $value): string => $value->format('Y-m-d H:i:s.uP'),
+        fn(DateTimeImmutable $value): string => $value->format('Y-m-d\TH:i:s.uP'),
     ],
     'UUID' => [Str::uuid(), UuidInterface::class, fn(UuidInterface $value): string => $value->toString()],
     'custom payload' => [
