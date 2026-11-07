@@ -23,7 +23,7 @@ final class ArrayPayload implements Payload
         return new ArrayPayload($payload);
     }
 
-    public function type(): string
+    public static function type(): string
     {
         return '__chronicle_array_payload';
     }
@@ -32,6 +32,14 @@ final class ArrayPayload implements Payload
      * @return array<mixed>
      */
     public function jsonSerialize(): array
+    {
+        return $this->payload;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function value(): array
     {
         return $this->payload;
     }

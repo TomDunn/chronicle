@@ -13,7 +13,7 @@ final class LaunchPayload implements Payload
      */
     public function __construct(private array $data) {}
 
-    public function type(): string
+    public static function type(): string
     {
         return 'test-launch';
     }

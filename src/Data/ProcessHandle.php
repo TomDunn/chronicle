@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Chronicle\Process\Data;
 
+use Chronicle\Process\Exceptions\ProcessNotCompletedException;
+
 final class ProcessHandle
 {
     public function __construct(
@@ -55,6 +57,10 @@ final class ProcessHandle
      */
     public function value(): mixed
     {
+        if (! $this->hasCompleted()) {
+            throw ProcessNotCompletedException::forInstance($this->id, $this->status);
+        }
+
         return $this->result;
     }
 

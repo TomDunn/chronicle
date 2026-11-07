@@ -7,6 +7,7 @@ use Chronicle\Process\Chronicle;
 use Chronicle\Process\Contracts\Payload;
 use Chronicle\Process\Data\ArrayPayload;
 use Chronicle\Process\Data\ProcessHandle;
+use Chronicle\Process\Enums\EntryType;
 use Chronicle\Process\Executor;
 use Chronicle\Process\Models\JournalEntry;
 use Chronicle\Process\Models\ProcessInstance;
@@ -32,12 +33,13 @@ beforeEach(function (): void {
  */
 function launchExecutorProcess(Closure $handler, Payload|array $payload = []): ProcessHandle
 {
-    $chronicle = (new Chronicle)
+    $chronicle = (new Chronicle())
         ->registerProcess(ExecutorProcess::class)
-        ->registerPayload(new LaunchPayload([]));
+        ->registerPayload(LaunchPayload::class)
+        ->registerPayload(ArrayPayload::class);
 
     app()->instance(Chronicle::class, $chronicle);
-    app()->bind(ExecutorProcess::class, fn (): ExecutorProcess => new ExecutorProcess($handler));
+    app()->bind(ExecutorProcess::class, fn(): ExecutorProcess => new ExecutorProcess($handler));
 
     return $chronicle->launch(ExecutorProcess::class, $payload, 'executor-key');
 }
@@ -93,7 +95,7 @@ it('claims a pending instance and records an activity using the deserialized lau
 
     $entries = JournalEntry::query()->orderBy('sequence')->get();
 
-    expect($entries->pluck('entry_type')->all())->toBe(['launch', 'activity'])
+    expect($entries->pluck('entry_type')->all())->toBe([EntryType::Launch, EntryType::Activity])
         ->and($entries->pluck('sequence')->all())->toBe([0, 1])
         ->and($entries[1]->process_instance_id)->toBe($handle->id())
         ->and($entries[1]->step_key)->toBe('read-input')
@@ -105,7 +107,7 @@ it('claims a pending instance and records an activity using the deserialized lau
 ]);
 
 it('completes a process that returns without yielding', function (): void {
-    $handle = launchExecutorProcess(fn (Payload $input): array => ['input' => $input->jsonSerialize()], ['value' => 42]);
+    $handle = launchExecutorProcess(fn(Payload $input): array => ['input' => $input->jsonSerialize()], ['value' => 42]);
 
     app(Executor::class)->execute($handle);
 
@@ -234,18 +236,18 @@ it('reconstructs supported object activity results during replay', function (obj
     'Carbon' => [
         Carbon::parse('2026-11-06 12:00:00.123456', 'America/New_York'),
         Carbon::class,
-        fn (Carbon $value): string => $value->format('Y-m-d H:i:s.u e'),
+        fn(Carbon $value): string => $value->format('Y-m-d H:i:s.u e'),
     ],
     'immutable date' => [
         new DateTimeImmutable('2026-11-06T12:00:00.123456+00:00'),
         DateTimeImmutable::class,
-        fn (DateTimeImmutable $value): string => $value->format('Y-m-d H:i:s.uP'),
+        fn(DateTimeImmutable $value): string => $value->format('Y-m-d H:i:s.uP'),
     ],
-    'UUID' => [Str::uuid(), UuidInterface::class, fn (UuidInterface $value): string => $value->toString()],
+    'UUID' => [Str::uuid(), UuidInterface::class, fn(UuidInterface $value): string => $value->toString()],
     'custom payload' => [
         new LaunchPayload(['reference' => 'ref-123']),
         LaunchPayload::class,
-        fn (LaunchPayload $value): array => $value->jsonSerialize(),
+        fn(LaunchPayload $value): array => $value->jsonSerialize(),
     ],
 ]);
 
@@ -435,7 +437,7 @@ it('suspends for a signal and resumes only when a matching signal is available',
 
 it('consumes an already received signal without suspending or treating it as a yielded step', function (): void {
     $handle = launchExecutorProcess(function (Payload $input): Generator {
-        $first = yield Steps::activity('before-signal', fn (): array => ['prepared' => true]);
+        $first = yield Steps::activity('before-signal', fn(): array => ['prepared' => true]);
         yield Steps::awaitSignal('approval-wait', 'approved');
 
         return $first;
@@ -504,7 +506,7 @@ it('consumes each signal once and reuses its original wait association during re
 it('fails replay when the next step key or type changes', function (Step $replacement): void {
     $deadline = now()->addHour()->toImmutable();
     $handle = launchExecutorProcess(function (Payload $input) use ($deadline): Generator {
-        yield Steps::activity('original', fn (): array => ['recorded' => true]);
+        yield Steps::activity('original', fn(): array => ['recorded' => true]);
         yield Steps::waitUntil('pause', $deadline);
 
         return ['finished' => true];
@@ -515,7 +517,7 @@ it('fails replay when the next step key or type changes', function (Step $replac
     expect(ProcessInstance::query()->sole()->status)->toBe('suspended');
 
     $original = JournalEntry::query()->orderBy('sequence')->get()->map->getRawOriginal()->all();
-    app()->bind(ExecutorProcess::class, fn (): ExecutorProcess => new ExecutorProcess(
+    app()->bind(ExecutorProcess::class, fn(): ExecutorProcess => new ExecutorProcess(
         function (Payload $input) use ($replacement, $deadline): Generator {
             yield $replacement;
             yield Steps::waitUntil('pause', $deadline);
@@ -537,14 +539,14 @@ it('fails replay when the next step key or type changes', function (Step $replac
         ->and(JournalEntry::query()->where('entry_type', '!=', 'process_error')->orderBy('sequence')->get()->map->getRawOriginal()->all())
         ->toBe($original);
 })->with([
-    'step key' => fn (): Step => Steps::activity('renamed', fn (): never => throw new LogicException('Must not execute')),
-    'step type' => fn (): Step => Steps::waitUntil('original', new DateTimeImmutable('2026-11-06 13:00:00')),
+    'step key' => fn(): Step => Steps::activity('renamed', fn(): never => throw new LogicException('Must not execute')),
+    'step type' => fn(): Step => Steps::waitUntil('original', new DateTimeImmutable('2026-11-06 13:00:00')),
 ]);
 
 it('fails replay when a process returns before consuming its recorded steps', function (): void {
     $deadline = now()->addHour()->toImmutable();
     $handle = launchExecutorProcess(function (Payload $input) use ($deadline): Generator {
-        yield Steps::activity('original', fn (): array => ['recorded' => true]);
+        yield Steps::activity('original', fn(): array => ['recorded' => true]);
         yield Steps::waitUntil('pause', $deadline);
 
         return ['finished' => true];
@@ -554,8 +556,8 @@ it('fails replay when a process returns before consuming its recorded steps', fu
 
     expect(ProcessInstance::query()->sole()->status)->toBe('suspended');
 
-    app()->bind(ExecutorProcess::class, fn (): ExecutorProcess => new ExecutorProcess(
-        fn (Payload $input): array => ['returned' => 'too early'],
+    app()->bind(ExecutorProcess::class, fn(): ExecutorProcess => new ExecutorProcess(
+        fn(Payload $input): array => ['returned' => 'too early'],
     ));
     ProcessInstance::query()->whereKey($handle->id())->update(['status' => 'pending']);
 
@@ -741,7 +743,7 @@ it('marks the instance failed after the execution transaction rolls back', funct
 
             return ['first' => true];
         });
-        yield Steps::activity('second', fn (): never => throw new RuntimeException('Activity failed'));
+        yield Steps::activity('second', fn(): never => throw new RuntimeException('Activity failed'));
 
         return ['finished' => true];
     });

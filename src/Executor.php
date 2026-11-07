@@ -4,19 +4,37 @@ declare(strict_types=1);
 
 namespace Chronicle\Process;
 
+use Chronicle\Process\Contracts\Payload;
+use Chronicle\Process\Data\ArrayPayload;
+use Chronicle\Process\Data\CommonScalarPayload;
 use Chronicle\Process\Data\ExecutionSummary;
 use Chronicle\Process\Data\ProcessHandle;
+use Chronicle\Process\Data\WaitPayload;
 use Chronicle\Process\Enums\EntryType;
 use Chronicle\Process\Enums\ExecutionOutcome;
+use Chronicle\Process\Exceptions\CorruptJournalException;
+use Chronicle\Process\Exceptions\InvalidStepException;
+use Chronicle\Process\Exceptions\ReplayException;
 use Chronicle\Process\Models\JournalEntry;
 use Chronicle\Process\Models\ProcessInstance;
+use Chronicle\Process\Steps\ActivityStep;
+use Chronicle\Process\Steps\Step;
+use Generator;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 final class Executor
 {
+    public function __construct(
+        private Chronicle $chronicle,
+        private Steps $steps,
+    ) {}
+
     public function execute(ProcessHandle $handle): ExecutionSummary
     {
+        $process = $this->chronicle->resolveProcess($handle->type());
+
         // claim instance by generating a uuid
         $claim = Str::uuid()->toString();
         // do a conditional update on process instance where claim token is missing, active is true and status pending
@@ -40,7 +58,7 @@ final class Executor
         //
         // now start a transaction, do a read on the process instance again only selecting
         // a row matching the instance and with our claim token, lock the row for update.
-        DB::connection()->transaction(function () use ($handle, $claim) {
+        return DB::connection()->transaction(function () use ($handle, $claim, $process) {
             $instance = ProcessInstance::query()
                 ->where('id', $handle->id)
                 ->where('claim_token', $claim)
@@ -54,6 +72,7 @@ final class Executor
             }
 
             // load the processes' non-signal, non activity_error, non process_error journal entries in ascending order by sequence.
+            /** @var Collection<int, JournalEntry> $replayEntries */
             $replayEntries = JournalEntry::query()
                 ->where('process_instance_id', $instance->id)
                 ->whereNotIn('entry_type', [EntryType::ActivityError, EntryType::ProcessError, EntryType::Signal])
@@ -61,21 +80,108 @@ final class Executor
                 ->get();
 
             // load the processes' signals in ascending order in a separate collection. this is our "inbox"
+            /** @var Collection<int, JournalEntry> $signalInbox */
             $signalInbox = JournalEntry::query()
                 ->where('process_instance_id', $instance->id)
                 ->where('entry_type', EntryType::Signal)
                 ->orderBy('id', 'asc')
                 ->get();
+
+            /** @var JournalEntry|null $launchEntry-*/
+            $launchEntry = $replayEntries->shift();
+
+            if (! $launchEntry || $launchEntry->entry_type !== EntryType::Launch) {
+                throw new CorruptJournalException("Process Instance ${$handle->id()} is missing a Launch entry");
+            }
+
+
+            $launchPayload = $this->chronicle->deserializePayload($launchEntry->payload_type, $launchEntry->payload);
+            $outcome = $process->run($launchPayload, $this->steps);
+            $sequence = 0;
+            $result = null;
+
+            if ($outcome instanceof  Generator) {
+
+                while ($outcome->valid()) {
+                    /** @var JournalEntry|null $entry-*/
+                    $entry = $replayEntries->shift();
+                    $step = $outcome->current();
+
+                    if (! $step instanceof Step) {
+                        throw InvalidStepException::notAStep($instance->id);
+                    }
+
+                    if ($entry) {
+                        // replaying
+                        $sequence = $entry->sequence;
+
+                        if ($step->stepKey !== $entry->step_key) {
+                            throw ReplayException::stepMismatch($instance->id, $entry->step_key, $step->stepKey);
+                        }
+
+                        if ($step->entryType !== $entry->entry_type) {
+                            throw ReplayException::stepEntryTypeMismatch($instance->id, $entry->entry_type->value, $step->entryType->value);
+                        }
+
+                        if ($step->entryType === EntryType::Activity) {
+                            /** @var Payload|ArrayPayload|CommonScalarPayload $payload */
+                            $payload = $this->chronicle->deserializePayload($entry->payload_type, $entry->payload);
+                            $outcome->send(method_exists($payload, 'value') ? $payload->value() : $payload);
+                        } elseif ($step->entryType === EntryType::Wait) {
+                            $waitPayload = WaitPayload::fromPayload($entry->payload);
+
+                            if ($waitPayload->hasPassed(now())) {
+                                $outcome->send(null);
+                            } else {
+                                $instance->suspended_until = $waitPayload->until;
+                                $instance->status = 'suspended';
+                                $instance->claim_token = null;
+                                $instance->claim_expires_at = null;
+                                $instance->save();
+                                return new ExecutionSummary($instance->id, ExecutionOutcome::Suspended);
+                            }
+                        }
+                    } else {
+                        // not replaying
+                        $sequence++;
+
+                        if ($step instanceof ActivityStep) {
+                            // TODO - inner transaction/savepoint
+                            $activityResult = ($step->callback)();
+                            $activityResultPayload = $this->chronicle->toPayload($activityResult);
+
+                            JournalEntry::query()->create([
+                                'process_instance_id' => $instance->id,
+                                'description' => $step->description,
+                                'payload' => $activityResultPayload->jsonSerialize(),
+                                'payload_type' => $activityResultPayload->type(),
+                                'step_key' => $step->stepKey,
+                                'entry_type' => EntryType::Activity,
+                                'sequence' => $sequence,
+                            ]);
+
+                            $outcome->send($activityResult);
+                        }
+                    }
+                }
+
+                $result = $outcome->getReturn();
+            } else {
+                $result = $outcome;
+            }
+
+
+            $instance->claim_token = null;
+            $instance->claim_expires_at = null;
+            $instance->active = false;
+            $instance->status = 'completed';
+            $instance->result = $this->chronicle->serializePayload($result);
+            $instance->save();
+            return new ExecutionSummary($instance->id, ExecutionOutcome::Completed, $result);
         });
         //
         // for now, activity and process error entries are treated as informational logs.
         //
-        // create an instance of the process, use a process registry to locate the class. Use laravel
-        // app(class) to create the instance such that the processes' constructor can use dependency injection.
-        //
-        // the first entry should be the launch entry_type, that payload should be passed to the run method
-        // along with an instance of the Steps helper. If the first entry is not a launch entry_type, there is
-        // a severe bug in the framework, the executor should fail loudly.
         //
         // when/if the run call yields, check the yielded step descriptor, if the step_key matches:
         //   and its an activity - use the payload from the entry and do not invoke the callback. use a (TBD) payload registry

@@ -8,7 +8,7 @@ use JsonSerializable;
 
 interface Payload extends JsonSerializable
 {
-    public function type(): string;
+    public static function type(): string;
 
     /**
      * @return array<mixed>

@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Chronicle\Process;
 
+use Carbon\Carbon;
 use Chronicle\Process\Contracts\Payload;
 use Chronicle\Process\Contracts\Process;
 use Chronicle\Process\Data\ArrayPayload;
+use Chronicle\Process\Data\CommonScalarPayload;
 use Chronicle\Process\Data\ProcessHandle;
+use Chronicle\Process\Exceptions\InvalidPayloadException;
 use Chronicle\Process\Models\JournalEntry;
 use Chronicle\Process\Models\ProcessInstance;
 use Illuminate\Support\Facades\DB;
@@ -15,11 +18,14 @@ use InvalidArgumentException;
 
 final class Chronicle
 {
-    /** @var array<string, class-string<Process>> */
+    /** @var array<string, class-string<Process<Payload>>> */
     private $processRegistry = [];
 
+    /** @var array<string, class-string<Payload>> */
+    private $payloadRegistry = [];
+
     /**
-     * @param  class-string<Process>  $process
+     * @param  class-string<Process<Payload>>  $process
      */
     public function registerProcess(string $process): self
     {
@@ -32,14 +38,57 @@ final class Chronicle
         return $this;
     }
 
-    public function registerPayload(Payload $payload): self
+    /**
+     * @return Process<Payload>
+     */
+    public function resolveProcess(string $processType): Process
     {
+        if (! array_key_exists($processType, $this->processRegistry)) {
+            throw new InvalidArgumentException("$processType is not registered");
+        }
+
+        return app($this->processRegistry[$processType]);
+    }
+
+    /**
+     * @param  class-string<Payload>  $payload
+     */
+    public function registerPayload(string $payload): self
+    {
+        $this->payloadRegistry[$payload::type()] = $payload;
         return $this;
     }
 
-    public function deserializePayload(string $type, array $data): mixed // TODO
+    /**
+     * @param array<string, mixed> $data
+     */
+    public function deserializePayload(string $type, array $data): Payload
     {
-        return null;
+        if (! array_key_exists($type, $this->payloadRegistry)) {
+            throw InvalidPayloadException::unregisteredType($type);
+        }
+        return $this->payloadRegistry[$type]::fromPayload($data);
+    }
+
+    public function toPayload(mixed $payload): Payload
+    {
+        if ($payload instanceof Payload) {
+            return $payload;
+        }
+
+        if (is_array($payload)) {
+            return ArrayPayload::make($payload);
+        }
+
+        return CommonScalarPayload::make($payload);
+    }
+
+    /**
+     *  @return array<string, mixed>
+     */
+    public function serializePayload(mixed $payload): array
+    {
+        return $this->toPayload($payload)->jsonSerialize();
     }
 
     /**

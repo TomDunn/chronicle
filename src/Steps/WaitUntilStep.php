@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Chronicle\Process\Steps;
 
+use Chronicle\Process\Enums\EntryType;
 use DateTimeImmutable;
 
 final readonly class WaitUntilStep extends Step
@@ -13,6 +14,6 @@ final readonly class WaitUntilStep extends Step
         public DateTimeImmutable $until,
         ?string $description = null,
     ) {
-        parent::__construct($stepKey, $description);
+        parent::__construct($stepKey, EntryType::Wait, $description);
     }
 }

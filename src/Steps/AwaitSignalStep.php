@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Chronicle\Process\Steps;
 
+use Chronicle\Process\Enums\EntryType;
+
 final readonly class AwaitSignalStep extends Step
 {
     public function __construct(
@@ -11,6 +13,6 @@ final readonly class AwaitSignalStep extends Step
         public string $signalName,
         ?string $description = null,
     ) {
-        parent::__construct($stepKey, $description);
+        parent::__construct($stepKey, EntryType::SignalWait, $description);
     }
 }

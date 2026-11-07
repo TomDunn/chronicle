@@ -19,10 +19,13 @@ use Illuminate\Database\Eloquent\Model;
  * @property string $status
  * @property ?string $claim_token
  * @property ?Carbon $claim_expires_at
+ * @property ?Carbon $suspended_until
  * @property array<string, mixed> $document
  * @property ?array<string, mixed> $result
  * @property Carbon $created_at
  * @property Carbon $updated_at
+ *
+ * @method static \Illuminate\Database\Eloquent\Builder<ProcessInstance> query()
  */
 class ProcessInstance extends Model
 {
@@ -48,6 +51,7 @@ class ProcessInstance extends Model
         return [
             'active' => 'boolean',
             'claim_expires_at' => 'datetime',
+            'suspended_until' => 'datetime',
             'document' => 'array',
             'result' => 'array',
         ];
