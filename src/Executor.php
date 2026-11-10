@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Chronicle\Process;
 
 use Chronicle\Process\Contracts\Payload;
+use Chronicle\Process\Contracts\Process;
 use Chronicle\Process\Data\ArrayPayload;
 use Chronicle\Process\Data\CommonScalarPayload;
 use Chronicle\Process\Data\ExecutionSummary;
@@ -21,12 +22,10 @@ use Chronicle\Process\Steps\ActivityStep;
 use Chronicle\Process\Steps\AwaitSignalStep;
 use Chronicle\Process\Steps\Step;
 use Chronicle\Process\Steps\WaitUntilStep;
-use Chronicle\Process\Contracts\Process;
 use Generator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use RuntimeException;
 
 final class Executor
 {
@@ -59,6 +58,7 @@ final class Executor
         if (! $claim) {
             return new ExecutionSummary($handle->id, ExecutionOutcome::Skipped);
         }
+
         //
         // now start a transaction, do a read on the process instance again only selecting
         // a row matching the instance and with our claim token, lock the row for update.
@@ -68,7 +68,7 @@ final class Executor
     }
 
     /**
-     * @param Process<Payload> $process
+     * @param  Process<Payload>  $process
      */
     public function executeInTransaction(ProcessHandle $handle, string $claim, Process $process): ExecutionSummary
     {
@@ -100,22 +100,21 @@ final class Executor
             ->orderBy('id', 'asc')
             ->get();
 
-        /** @var JournalEntry|null $launchEntry-*/
+        /** @var JournalEntry|null $launchEntry- */
         $launchEntry = $replayEntries->shift();
 
         if (! $launchEntry || $launchEntry->entry_type !== EntryType::Launch) {
             throw new CorruptJournalException("Process Instance {$handle->id()} is missing a Launch entry");
         }
 
-
         $launchPayload = $this->chronicle->deserializePayload($launchEntry->payload_type, $launchEntry->payload);
         $outcome = $process->run($launchPayload, $this->steps);
         $sequence = 0;
         $result = null;
 
-        if ($outcome instanceof  Generator) {
+        if ($outcome instanceof Generator) {
             while ($outcome->valid()) {
-                /** @var JournalEntry|null $entry-*/
+                /** @var JournalEntry|null $entry- */
                 $entry = $replayEntries->shift();
                 $step = $outcome->current();
 
@@ -150,10 +149,36 @@ final class Executor
                             $instance->claim_token = null;
                             $instance->claim_expires_at = null;
                             $instance->save();
+
                             return new ExecutionSummary($instance->id, ExecutionOutcome::Suspended);
                         }
-                    } elseif ($step->entryType === EntryType::SignalWait) {
-                        throw new RuntimeException('todo');
+                    } elseif ($step->entryType === EntryType::SignalWait && $step instanceof AwaitSignalStep) {
+                        $signal = $signalInbox->firstWhere('consumed_by', $entry->id);
+
+                        if (! $signal) {
+                            $signal = $signalInbox->where('entry_type', EntryType::Signal->value)
+                                ->where('step_key', $step->signalName)
+                                ->whereNull('consumed_by')
+                                ->first();
+                        }
+
+                        if ($signal) {
+                            if (! $signal->consumed_by) {
+                                $signal->consumed_by = $entry->id;
+                                $signal->save();
+                            }
+
+                            $outcome->send($signal);
+                        } else {
+                            $instance->suspended_until = null;
+                            $instance->suspended_for_signals = [$step->signalName];
+                            $instance->status = 'suspended';
+                            $instance->claim_token = null;
+                            $instance->claim_expires_at = null;
+                            $instance->save();
+
+                            return new ExecutionSummary($instance->id, ExecutionOutcome::Suspended);
+                        }
                     }
                 } else {
                     // not replaying
@@ -195,12 +220,39 @@ final class Executor
                             $instance->status = 'suspended';
                             $instance->suspended_until = $waitPayload->until;
                             $instance->save();
+
                             return new ExecutionSummary($instance->id, ExecutionOutcome::Suspended);
                         } else {
                             $outcome->send(null);
                         }
                     } elseif ($step instanceof AwaitSignalStep) {
-                        throw new RuntimeException('todo');
+                        $entry = JournalEntry::query()->create([
+                            'process_instance_id' => $instance->id,
+                            'description' => $step->description,
+                            'step_key' => $step->stepKey,
+                            'entry_type' => EntryType::SignalWait,
+                            'sequence' => $sequence,
+                        ]);
+
+                        $signal = $signalInbox->where('entry_type', EntryType::Signal->value)
+                            ->where('step_key', $step->signalName)
+                            ->whereNull('consumed_by')
+                            ->first();
+
+                        if ($signal) {
+                            $signal->consumed_by = $entry->id;
+                            $signal->save();
+                            $outcome->send($signal);
+                        } else {
+                            $instance->suspended_until = null;
+                            $instance->suspended_for_signals = [$step->signalName];
+                            $instance->status = 'suspended';
+                            $instance->claim_token = null;
+                            $instance->claim_expires_at = null;
+                            $instance->save();
+
+                            return new ExecutionSummary($instance->id, ExecutionOutcome::Suspended);
+                        }
                     } else {
                         throw InvalidStepException::unknownStep($instance->id, $step);
                     }
@@ -212,13 +264,13 @@ final class Executor
             $result = $outcome;
         }
 
-
         $instance->claim_token = null;
         $instance->claim_expires_at = null;
         $instance->active = false;
         $instance->status = 'completed';
         $instance->result = $this->chronicle->serializePayload($result);
         $instance->save();
+
         return new ExecutionSummary($instance->id, ExecutionOutcome::Completed, $result);
         //
         // for now, activity and process error entries are treated as informational logs.

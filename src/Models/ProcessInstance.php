@@ -20,6 +20,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property ?string $claim_token
  * @property ?Carbon $claim_expires_at
  * @property ?Carbon $suspended_until
+ * @property array<mixed> $suspended_for_signals
  * @property array<string, mixed> $document
  * @property ?array<string, mixed> $result
  * @property Carbon $created_at
@@ -54,6 +55,7 @@ class ProcessInstance extends Model
             'suspended_until' => 'datetime',
             'document' => 'array',
             'result' => 'array',
+            'suspended_for_signals' => 'array',
         ];
     }
 }
