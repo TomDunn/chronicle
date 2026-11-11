@@ -7,6 +7,7 @@ use Chronicle\Process\Chronicle;
 use Chronicle\Process\Contracts\Payload;
 use Chronicle\Process\Data\ArrayPayload;
 use Chronicle\Process\Data\CommonScalarPayload;
+use Chronicle\Process\Data\ExceptionPayload;
 use Chronicle\Process\Data\ProcessHandle;
 use Chronicle\Process\Enums\EntryType;
 use Chronicle\Process\Executor;
@@ -38,6 +39,7 @@ function launchExecutorProcess(Closure $handler, Payload|array $payload = []): P
         ->registerProcess(ExecutorProcess::class)
         ->registerPayload(LaunchPayload::class)
         ->registerPayload(CommonScalarPayload::class)
+        ->registerPayload(ExceptionPayload::class)
         ->registerPayload(ArrayPayload::class);
 
     app()->instance(Chronicle::class, $chronicle);
@@ -164,7 +166,7 @@ it('fails without invoking the process when its launch entry is missing', functi
         ->and($instance->claim_token)->toBeNull()
         ->and($instance->claim_expires_at)->toBeNull()
         ->and($calls)->toBe(0)
-        ->and(JournalEntry::query()->sole()->entry_type)->toBe('process_error');
+        ->and(JournalEntry::query()->sole()->entry_type)->toBe(EntryType::ProcessError);
 });
 
 it('replays activity results with their original value and type', function (mixed $value): void {
