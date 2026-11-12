@@ -28,6 +28,8 @@ Use this skill when a Laravel application needs to integrate the Chronicle packa
 - Import `Chronicle\Process\Steps` to construct activities, deadline waits, and signal waits for process generators.
 - Give every step a stable `stepKey`; use the optional `description` for operator-facing text.
 - `Steps::activity()` accepts a closure without executing it. `Steps::waitUntil()` captures a `DateTimeInterface` deadline as an immutable value. `Steps::awaitSignal()` accepts one signal name.
+- Date activity results preserve their concrete class, microseconds, and timezone name. Supported classes are `DateTime`, `DateTimeImmutable`, `Carbon\Carbon`, `Carbon\CarbonImmutable`, and `Illuminate\Support\Carbon`; custom subclasses require an explicit `Payload` implementation.
+- Older datetime payloads without type metadata keep their previous Carbon decoding behavior; their original class and named timezone cannot be recovered.
 - These helpers construct step objects only. Process execution, replay, and suspension for these objects are not yet wired into the engine.
 - `Chronicle\Process\Data\ExecutionSummary` holds an instance ID, an `ExecutionOutcome`, an optional result, and an optional `Throwable`. The four outcomes are `Completed`, `Suspended`, `Failed`, and `Skipped`; they describe an attempt rather than the stored process status.
 - A completed result can be `null`; check the outcome to identify completion. A failed outcome does not guarantee that a database failure allowed the failed status to be persisted.

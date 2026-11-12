@@ -68,6 +68,10 @@ $handle = Chronicle::launch(ApprovalProcess::class, ['request_id' => 123], key: 
 
 The facade and `app(\Chronicle\Process\Chronicle::class)` share the same singleton and process registry.
 
+Activity date results preserve their concrete type, microseconds, and timezone name during replay.
+Supported types are `DateTime`, `DateTimeImmutable`, `Carbon\Carbon`, `Carbon\CarbonImmutable`, and `Illuminate\Support\Carbon`.
+Custom date subclasses require an explicit `Payload` implementation. Older datetime records without type metadata retain their previous Carbon decoding behavior.
+
 ## Changelog
 
 Please see [CHANGELOG](CHANGELOG.md) for more information on what has changed recently.

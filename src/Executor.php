@@ -26,6 +26,7 @@ use Chronicle\Process\Steps\WaitUntilStep;
 use Generator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -61,49 +62,66 @@ final class Executor
             return new ExecutionSummary($handle->id, ExecutionOutcome::Skipped);
         }
 
-        //
-        // now start a transaction, do a read on the process instance again only selecting
-        // a row matching the instance and with our claim token, lock the row for update.
-        return DB::connection()->transaction(function () use ($handle, $claim, $process) {
-            $instance = null;
+        try {
+            // now start a transaction, do a read on the process instance again only selecting
+            // a row matching the instance and with our claim token, lock the row for update.
+            return DB::connection()->transaction(function () use ($handle, $claim, $process) {
+                $instance = null;
 
-            try {
-                $instance = ProcessInstance::query()
-                    ->where('id', $handle->id)
-                    ->where('claim_token', $claim)
-                    ->lockForUpdate()
-                    ->first();
+                try {
+                    $instance = ProcessInstance::query()
+                        ->where('id', $handle->id)
+                        ->where('claim_token', $claim)
+                        ->lockForUpdate()
+                        ->first();
 
-                // observe the result count, if 0, someone else stole the claim, we should not proceed.
-                // use similar execution summary as above to indicate that we effectively did nothing.
-                if (! $instance) {
-                    return new ExecutionSummary($handle->id, ExecutionOutcome::Skipped);
+                    // observe the result count, if 0, someone else stole the claim, we should not proceed.
+                    // use similar execution summary as above to indicate that we effectively did nothing.
+                    if (! $instance) {
+                        return new ExecutionSummary($handle->id, ExecutionOutcome::Skipped);
+                    }
+
+                    return $this->executeInTransaction($instance, $claim, $process);
+                } catch (Throwable $e) {
+                    JournalEntry::query()->create([
+                        'process_instance_id' => $handle->id(),
+                        'description' => 'Exception caught while executing process',
+                        'entry_type' => EntryType::ProcessError,
+                        'payload_type' => ExceptionPayload::TYPE,
+                        'payload' => ExceptionPayload::make($e),
+                        'step_key' => 'process_error',
+                    ]);
+
+                    if ($instance) {
+                        $instance->claim_token = null;
+                        $instance->claim_expires_at = null;
+                        $instance->suspended_until = null;
+                        $instance->suspended_for_signals = null;
+                        $instance->status = 'failed';
+                        $instance->save();
+                    }
+
+                    return new ExecutionSummary($instance->id, ExecutionOutcome::Failed, error: $e);
                 }
+            });
+        } catch (Throwable $e) {
+            Log::error('Process execution transaction failed', [
+                'exception' => $e,
+                'process_instance_id' => $handle->id(),
+            ]);
 
-                return $this->executeInTransaction($instance, $claim, $process);
-            } catch (Throwable $e) {
-                JournalEntry::query()->create([
-                    'process_instance_id' => $handle->id(),
-                    'description' => "Exception caught while executing process",
-                    'entry_type' => EntryType::ProcessError,
-                    'payload_type' => ExceptionPayload::TYPE,
-                    'payload' => ExceptionPayload::make($e),
-                    'step_key' => 'process_error',
+            ProcessInstance::query()
+                ->where('id', $handle->id())
+                ->where('claim_token', $claim)
+                ->where('status', 'running')
+                ->update([
+                    'claim_token' => null,
+                    'claim_expires_at' => null,
+                    'status' => 'failed',
                 ]);
 
-                if ($instance) {
-                    $instance->claim_token = null;
-                    $instance->claim_expires_at = null;
-                    $instance->suspended_until = null;
-                    $instance->suspended_for_signals = null;
-                    $instance->status = 'failed';
-                    $instance->save();
-                }
-
-                return new ExecutionSummary($instance->id, ExecutionOutcome::Failed, $e);
-
-            }
-        });
+            return new ExecutionSummary($handle->id(), ExecutionOutcome::Failed, error: $e);
+        }
     }
 
     /**
@@ -259,7 +277,7 @@ final class Executor
                         } catch (Throwable $e) {
                             JournalEntry::query()->create([
                                 'process_instance_id' => $instance->id,
-                                'description' => "Exception caught while executing process",
+                                'description' => 'Exception caught while executing process',
                                 'step_key' => $step->stepKey,
                                 'entry_type' => EntryType::ProcessError,
                                 'payload_type' => ExceptionPayload::TYPE,
@@ -337,6 +355,10 @@ final class Executor
             $result = $outcome->getReturn();
         } else {
             $result = $outcome;
+        }
+
+        if ($replayEntries->count()) {
+            throw ReplayException::unexpectedEarlyReturn($instance->id);
         }
 
         $instance->claim_token = null;
