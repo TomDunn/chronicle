@@ -58,7 +58,7 @@ final class Executor
                 'status' => 'running',
             ]);
 
-        if (! $claim) {
+        if (! $claimed) {
             return new ExecutionSummary($handle->id, ExecutionOutcome::Skipped);
         }
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Chronicle\Process\Models;
 
 use Carbon\Carbon;
+use Chronicle\Process\Data\ProcessHandle;
 use Database\Factories\ProcessInstanceFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -57,5 +58,10 @@ class ProcessInstance extends Model
             'result' => 'array',
             'suspended_for_signals' => 'array',
         ];
+    }
+
+    public function toHandle(): ProcessHandle
+    {
+        return new ProcessHandle($this->id, $this->process_type, $this->status);
     }
 }
