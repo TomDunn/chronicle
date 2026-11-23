@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace Chronicle\Process\Exceptions;
 
 use Chronicle\Process\Enums\EntryType;
-use RuntimeException;
 
-final class CorruptJournalException extends RuntimeException implements ChronicleException
+final class CorruptJournalException extends ChronicleNonRetriableException
 {
     public static function missingLaunchEntry(string|int $instanceId, string|EntryType|null $actual = null): self
     {

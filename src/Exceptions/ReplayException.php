@@ -4,9 +4,7 @@ declare(strict_types=1);
 
 namespace Chronicle\Process\Exceptions;
 
-use RuntimeException;
-
-final class ReplayException extends RuntimeException implements ChronicleException
+final class ReplayException extends ChronicleNonRetriableException
 {
     public static function stepMismatch(string|int $instanceId, string $expectedKey, string $actualKey): self
     {

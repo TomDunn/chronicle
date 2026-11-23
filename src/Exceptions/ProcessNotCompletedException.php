@@ -4,9 +4,7 @@ declare(strict_types=1);
 
 namespace Chronicle\Process\Exceptions;
 
-use RuntimeException;
-
-final class ProcessNotCompletedException extends RuntimeException implements ChronicleException
+final class ProcessNotCompletedException extends ChronicleNonRetriableException
 {
     public static function forInstance(string|int $instanceId, string $status): self
     {

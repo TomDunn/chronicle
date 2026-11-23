@@ -4,13 +4,12 @@ declare(strict_types=1);
 
 namespace Chronicle\Process\Exceptions;
 
-use RuntimeException;
-
-final class InvalidPayloadException extends RuntimeException implements ChronicleException
+final class InvalidPayloadException extends ChronicleNonRetriableException
 {
     public static function unsupportedScalar(mixed $value): self
     {
         $type = gettype($value);
+
         return new self("Unsupported scalar of type {$type}");
     }
 

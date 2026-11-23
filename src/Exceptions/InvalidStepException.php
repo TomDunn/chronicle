@@ -4,9 +4,7 @@ declare(strict_types=1);
 
 namespace Chronicle\Process\Exceptions;
 
-use RuntimeException;
-
-final class InvalidStepException extends RuntimeException implements ChronicleException
+final class InvalidStepException extends ChronicleNonRetriableException
 {
     public static function notAStep(string|int $instanceId): self
     {
@@ -16,6 +14,7 @@ final class InvalidStepException extends RuntimeException implements ChronicleEx
     public static function unknownStep(string|int $instanceId, mixed $step): self
     {
         $step = $step::class;
+
         return new self("Process instance [{$instanceId}] yielded something other than a step! {$step}");
     }
 }

@@ -10,6 +10,7 @@ enum EntryType: string
     case Activity = 'activity';
     case Wait = 'wait';
     case SignalWait = 'signal_wait';
+    case Resume = 'resume';
     case Signal = 'signal';
     case ActivityError = 'activity_error';
     case ProcessError = 'process_error';
