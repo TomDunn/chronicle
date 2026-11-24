@@ -234,6 +234,12 @@ final class Executor
 
                         try {
                             $res = DB::connection()->transaction(function () use ($step, $instance, $sequence) {
+                                // load prior attempts by querying for activity_error
+                                // entry types with the same step_key and sequence
+                                // take the largest attempt number and increment it, that is our
+                                // next attempt number. Otherwise this is attempt 1.
+                                //
+                                // wrap the callback invocation in try/catch
                                 $activityResult = ($step->callback)();
                                 $activityResultPayload = $this->chronicle->toPayload($activityResult);
 
@@ -304,7 +310,6 @@ final class Executor
                             'step_key' => $step->stepKey,
                             'entry_type' => EntryType::Wait,
                             'sequence' => $sequence,
-
                         ]);
 
                         if (! $waitPayload->hasPassed(now())) {

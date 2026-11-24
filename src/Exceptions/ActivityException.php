@@ -15,4 +15,9 @@ final class ActivityException extends RuntimeException implements ChronicleExcep
 
         return new self("Exception caught while running activity  {$entryKey} in instance {$instanceId}", $e);
     }
+
+    public function isRetryable(): bool
+    {
+        return false;
+    }
 }

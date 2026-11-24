@@ -8,6 +8,8 @@ use Chronicle\Process\Enums\EntryType;
 
 final class CorruptJournalException extends ChronicleNonRetriableException
 {
+    use NonRetryable;
+
     public static function missingLaunchEntry(string|int $instanceId, string|EntryType|null $actual = null): self
     {
         $found = match (true) {

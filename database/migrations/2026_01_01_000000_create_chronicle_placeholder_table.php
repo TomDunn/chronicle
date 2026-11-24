@@ -8,8 +8,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
-return new class extends Migration
-{
+return new class extends Migration {
     public function up(): void
     {
         Schema::create('process_instance', function (Blueprint $table) {
@@ -52,6 +51,9 @@ return new class extends Migration
             // executor managed journal entry sequence number.
             // sequence is not present for signal entries.
             $table->bigInteger('sequence')->nullable(true);
+            // for activity and activity errors.
+            // enables attempt based retries
+            $table->unsignedSmallInteger('attempt')->nullable(true);
             // operator friendly description for the entry
             $table->string('description')->nullable(true);
             // logical identifier of the step, assists with replay.

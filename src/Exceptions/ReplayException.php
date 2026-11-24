@@ -6,6 +6,8 @@ namespace Chronicle\Process\Exceptions;
 
 final class ReplayException extends ChronicleNonRetriableException
 {
+    use NonRetryable;
+
     public static function stepMismatch(string|int $instanceId, string $expectedKey, string $actualKey): self
     {
         return new self("Replay mismatch for process instance [{$instanceId}]. Expected step [{$expectedKey}], but process produced [{$actualKey}].");

@@ -9,4 +9,7 @@ use Throwable;
 /**
  * Marker interface for all exceptions thrown by Chronicle.
  */
-interface ChronicleException extends Throwable {}
+interface ChronicleException extends Throwable
+{
+    public function isRetryable(): bool;
+}

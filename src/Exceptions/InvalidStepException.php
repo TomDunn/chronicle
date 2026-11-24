@@ -6,6 +6,8 @@ namespace Chronicle\Process\Exceptions;
 
 final class InvalidStepException extends ChronicleNonRetriableException
 {
+    use NonRetryable;
+
     public static function notAStep(string|int $instanceId): self
     {
         return new self("Process instance [{$instanceId}] yielded something other than a step!");

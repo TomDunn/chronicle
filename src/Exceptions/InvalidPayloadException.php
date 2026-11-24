@@ -6,6 +6,8 @@ namespace Chronicle\Process\Exceptions;
 
 final class InvalidPayloadException extends ChronicleNonRetriableException
 {
+    use NonRetryable;
+
     public static function unsupportedScalar(mixed $value): self
     {
         $type = gettype($value);

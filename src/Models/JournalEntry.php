@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property Carbon $recorded_at
  * @property string $step_key
  * @property ?int $sequence
+ * @property ?int $attempt
  */
 class JournalEntry extends Model
 {

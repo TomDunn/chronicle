@@ -10,4 +10,5 @@ enum ExecutionOutcome: string
     case Suspended = 'suspended';
     case Failed = 'failed';
     case Skipped = 'skipped';
+    case RetryScheduled = 'retry-scheduled';
 }
