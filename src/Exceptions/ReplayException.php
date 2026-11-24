@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Chronicle\Process\Exceptions;
 
-final class ReplayException extends ChronicleNonRetriableException
+use RuntimeException;
+
+final class ReplayException extends RuntimeException implements ChronicleException
 {
     use NonRetryable;
 

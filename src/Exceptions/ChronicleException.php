@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace Chronicle\Process\Exceptions;
 
+use Chronicle\Process\Contracts\HasRetryStatus;
 use Throwable;
 
 /**
  * Marker interface for all exceptions thrown by Chronicle.
  */
-interface ChronicleException extends Throwable
+interface ChronicleException extends Throwable, HasRetryStatus
 {
-    public function isRetryable(): bool;
+    //
 }

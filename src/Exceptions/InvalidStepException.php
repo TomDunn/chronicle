@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Chronicle\Process\Exceptions;
 
-final class InvalidStepException extends ChronicleNonRetriableException
+use RuntimeException;
+
+final class InvalidStepException extends RuntimeException implements ChronicleException
 {
     use NonRetryable;
 

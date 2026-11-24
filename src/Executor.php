@@ -86,7 +86,7 @@ final class Executor
                     JournalEntry::query()->create([
                         'process_instance_id' => $handle->id(),
                         'description' => 'Exception caught while executing process',
-                        'entry_type' => EntryType::ProcessError,
+                        'entry_type' => EntryType::ProcessFailure,
                         'payload_type' => ExceptionPayload::TYPE,
                         'payload' => ExceptionPayload::make($e),
                         'step_key' => 'process_error',
@@ -133,7 +133,7 @@ final class Executor
         /** @var Collection<int, JournalEntry> $replayEntries */
         $replayEntries = JournalEntry::query()
             ->where('process_instance_id', $instance->id)
-            ->whereNotIn('entry_type', [EntryType::ActivityError, EntryType::ProcessError, EntryType::Signal])
+            ->whereNotIn('entry_type', [EntryType::ActivityError, EntryType::ProcessFailure, EntryType::Signal])
             ->orderBy('sequence', 'asc')
             ->get();
 
@@ -285,7 +285,7 @@ final class Executor
                                 'process_instance_id' => $instance->id,
                                 'description' => 'Exception caught while executing process',
                                 'step_key' => $step->stepKey,
-                                'entry_type' => EntryType::ProcessError,
+                                'entry_type' => EntryType::ProcessFailure,
                                 'payload_type' => ExceptionPayload::TYPE,
                                 'payload' => ExceptionPayload::make($e)->jsonSerialize(),
                             ]);

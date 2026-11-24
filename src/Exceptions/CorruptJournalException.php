@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace Chronicle\Process\Exceptions;
 
 use Chronicle\Process\Enums\EntryType;
+use RuntimeException;
 
-final class CorruptJournalException extends ChronicleNonRetriableException
+final class CorruptJournalException extends RuntimeException implements ChronicleException
 {
     use NonRetryable;
 

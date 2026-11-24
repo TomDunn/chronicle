@@ -40,7 +40,7 @@ beforeEach(function (): void {
  */
 function launchExecutorProcess(Closure $handler, Payload|array $payload = []): ProcessHandle
 {
-    $chronicle = (new Chronicle)
+    $chronicle = (new Chronicle())
         ->registerProcess(ExecutorProcess::class)
         ->registerPayload(LaunchPayload::class)
         ->registerPayload(CommonScalarPayload::class)
@@ -48,7 +48,7 @@ function launchExecutorProcess(Closure $handler, Payload|array $payload = []): P
         ->registerPayload(ArrayPayload::class);
 
     app()->instance(Chronicle::class, $chronicle);
-    app()->bind(ExecutorProcess::class, fn (): ExecutorProcess => new ExecutorProcess($handler));
+    app()->bind(ExecutorProcess::class, fn(): ExecutorProcess => new ExecutorProcess($handler));
 
     return $chronicle->launch(ExecutorProcess::class, $payload, 'executor-key');
 }
@@ -116,7 +116,7 @@ it('claims a pending instance and records an activity using the deserialized lau
 ]);
 
 it('completes a process that returns without yielding', function (): void {
-    $handle = launchExecutorProcess(fn (Payload $input): array => ['input' => $input->jsonSerialize()], ['value' => 42]);
+    $handle = launchExecutorProcess(fn(Payload $input): array => ['input' => $input->jsonSerialize()], ['value' => 42]);
 
     app(Executor::class)->execute($handle);
 
@@ -171,7 +171,7 @@ it('fails without invoking the process when its launch entry is missing', functi
         ->and($instance->claim_token)->toBeNull()
         ->and($instance->claim_expires_at)->toBeNull()
         ->and($calls)->toBe(0)
-        ->and(JournalEntry::query()->sole()->entry_type)->toBe(EntryType::ProcessError);
+        ->and(JournalEntry::query()->sole()->entry_type)->toBe(EntryType::ProcessFailure);
 });
 
 it('replays activity results with their original value and type', function (mixed $value): void {
@@ -245,33 +245,33 @@ it('reconstructs supported object activity results during replay', function (obj
     'Carbon' => [
         Carbon::parse('2026-11-06 12:00:00.123456', 'America/New_York'),
         Carbon::class,
-        fn (Carbon $value): string => $value->format('Y-m-d\TH:i:s.uP e'),
+        fn(Carbon $value): string => $value->format('Y-m-d\TH:i:s.uP e'),
     ],
     'CarbonImmutable' => [
         CarbonImmutable::parse('2026-11-06 12:00:00.123456', 'America/New_York'),
         CarbonImmutable::class,
-        fn (CarbonImmutable $value): string => $value->format('Y-m-d\TH:i:s.uP e'),
+        fn(CarbonImmutable $value): string => $value->format('Y-m-d\TH:i:s.uP e'),
     ],
     'Laravel Carbon' => [
         LaravelCarbon::parse('2026-11-06 12:00:00.123456', 'America/New_York'),
         LaravelCarbon::class,
-        fn (LaravelCarbon $value): string => $value->format('Y-m-d\TH:i:s.uP e'),
+        fn(LaravelCarbon $value): string => $value->format('Y-m-d\TH:i:s.uP e'),
     ],
     'native date' => [
         new DateTime('2026-11-06 12:00:00.123456', new DateTimeZone('America/New_York')),
         DateTime::class,
-        fn (DateTime $value): string => $value->format('Y-m-d\TH:i:s.uP e'),
+        fn(DateTime $value): string => $value->format('Y-m-d\TH:i:s.uP e'),
     ],
     'immutable date' => [
         new DateTimeImmutable('2026-11-06T12:00:00.123456+00:00'),
         DateTimeImmutable::class,
-        fn (DateTimeImmutable $value): string => $value->format('Y-m-d\TH:i:s.uP e'),
+        fn(DateTimeImmutable $value): string => $value->format('Y-m-d\TH:i:s.uP e'),
     ],
-    'UUID' => [Str::uuid(), UuidInterface::class, fn (UuidInterface $value): string => $value->toString()],
+    'UUID' => [Str::uuid(), UuidInterface::class, fn(UuidInterface $value): string => $value->toString()],
     'custom payload' => [
         new LaunchPayload(['reference' => 'ref-123']),
         LaunchPayload::class,
-        fn (LaunchPayload $value): array => $value->jsonSerialize(),
+        fn(LaunchPayload $value): array => $value->jsonSerialize(),
     ],
 ]);
 
@@ -461,7 +461,7 @@ it('suspends for a signal and resumes only when a matching signal is available',
 
 it('consumes an already received signal without suspending or treating it as a yielded step', function (): void {
     $handle = launchExecutorProcess(function (Payload $input): Generator {
-        $first = yield Steps::activity('before-signal', fn (): array => ['prepared' => true]);
+        $first = yield Steps::activity('before-signal', fn(): array => ['prepared' => true]);
         yield Steps::awaitSignal('approval-wait', 'approved');
 
         return $first;
@@ -530,7 +530,7 @@ it('consumes each signal once and reuses its original wait association during re
 it('fails replay when the next step key or type changes', function (Step $replacement): void {
     $deadline = now()->addHour()->toImmutable();
     $handle = launchExecutorProcess(function (Payload $input) use ($deadline): Generator {
-        yield Steps::activity('original', fn (): array => ['recorded' => true]);
+        yield Steps::activity('original', fn(): array => ['recorded' => true]);
         yield Steps::waitUntil('pause', $deadline);
 
         return ['finished' => true];
@@ -541,7 +541,7 @@ it('fails replay when the next step key or type changes', function (Step $replac
     expect(ProcessInstance::query()->sole()->status)->toBe('suspended');
 
     $original = JournalEntry::query()->orderBy('sequence')->get()->map->getRawOriginal()->all();
-    app()->bind(ExecutorProcess::class, fn (): ExecutorProcess => new ExecutorProcess(
+    app()->bind(ExecutorProcess::class, fn(): ExecutorProcess => new ExecutorProcess(
         function (Payload $input) use ($replacement, $deadline): Generator {
             yield $replacement;
             yield Steps::waitUntil('pause', $deadline);
@@ -563,14 +563,14 @@ it('fails replay when the next step key or type changes', function (Step $replac
         ->and(JournalEntry::query()->where('entry_type', '!=', 'process_error')->orderBy('sequence')->get()->map->getRawOriginal()->all())
         ->toBe($original);
 })->with([
-    'step key' => fn (): Step => Steps::activity('renamed', fn (): never => throw new LogicException('Must not execute')),
-    'step type' => fn (): Step => Steps::waitUntil('original', new DateTimeImmutable('2026-11-06 13:00:00')),
+    'step key' => fn(): Step => Steps::activity('renamed', fn(): never => throw new LogicException('Must not execute')),
+    'step type' => fn(): Step => Steps::waitUntil('original', new DateTimeImmutable('2026-11-06 13:00:00')),
 ]);
 
 it('fails replay when a process returns before consuming its recorded steps', function (): void {
     $deadline = now()->addHour()->toImmutable();
     $handle = launchExecutorProcess(function (Payload $input) use ($deadline): Generator {
-        yield Steps::activity('original', fn (): array => ['recorded' => true]);
+        yield Steps::activity('original', fn(): array => ['recorded' => true]);
         yield Steps::waitUntil('pause', $deadline);
 
         return ['finished' => true];
@@ -580,8 +580,8 @@ it('fails replay when a process returns before consuming its recorded steps', fu
 
     expect(ProcessInstance::query()->sole()->status)->toBe('suspended');
 
-    app()->bind(ExecutorProcess::class, fn (): ExecutorProcess => new ExecutorProcess(
-        fn (Payload $input): array => ['returned' => 'too early'],
+    app()->bind(ExecutorProcess::class, fn(): ExecutorProcess => new ExecutorProcess(
+        fn(Payload $input): array => ['returned' => 'too early'],
     ));
     ProcessInstance::query()->whereKey($handle->id())->update(['status' => 'pending']);
 
@@ -767,7 +767,7 @@ it('marks the instance failed after the execution transaction rolls back', funct
 
             return ['first' => true];
         });
-        yield Steps::activity('second', fn (): never => throw new RuntimeException('Activity failed'));
+        yield Steps::activity('second', fn(): never => throw new RuntimeException('Activity failed'));
 
         return ['finished' => true];
     });
@@ -794,7 +794,7 @@ it('marks the instance failed after the execution transaction rolls back', funct
 });
 
 it('logs the exception that escapes the execution transaction', function (): void {
-    $handle = launchExecutorProcess(fn (Payload $input): never => throw new RuntimeException('Process body failed'));
+    $handle = launchExecutorProcess(fn(Payload $input): never => throw new RuntimeException('Process body failed'));
     DB::unprepared(<<<'SQL'
         CREATE TRIGGER reject_executor_process_error
         BEFORE INSERT ON process_journal_entry
@@ -814,7 +814,7 @@ it('logs the exception that escapes the execution transaction', function (): voi
         ->and($summary->error->getMessage())->toContain('Error journal unavailable');
 
     Log::shouldHaveReceived('error')->once()->withArgs(
-        fn (string $message, array $context): bool => $message === 'Process execution transaction failed'
+        fn(string $message, array $context): bool => $message === 'Process execution transaction failed'
             && $context['process_instance_id'] === $handle->id()
             && $context['exception'] === $summary->error,
     );

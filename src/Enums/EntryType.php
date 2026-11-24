@@ -13,5 +13,6 @@ enum EntryType: string
     case Resume = 'resume';
     case Signal = 'signal';
     case ActivityError = 'activity_error';
-    case ProcessError = 'process_error';
+    case ActivityFailed = 'activity_failure';
+    case ProcessFailure = 'process_failure';
 }
